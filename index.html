@@ -117,7 +117,8 @@
                 window.currentUserId = user.uid;
                 console.log("Firebase: 匿名登入成功. User ID:", user.uid);
             } else {
-                console.log("Firebase: 等待匿名登入.");
+                window.currentUserId = null; // 確保失敗時為 null
+                console.log("Firebase: 認證失敗或等待中.");
             }
             window.isAuthReady = true;
             
@@ -506,7 +507,7 @@
         }
 
         // Helper function to render the leaderboard table
-        function renderLeaderboard(ranks, playerId) {
+        function renderLeaderboard(ranks) {
             let tableRows = ranks.map(rank => `
                 <tr class="${rank.isPlayer ? 'bg-yellow-400 text-gray-900 font-extrabold shadow-md' : 'bg-gray-700 text-gray-200'} transition hover:bg-yellow-200">
                     <td class="p-2 text-center rounded-l-lg">${rank.rank}</td>
@@ -528,7 +529,7 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                ${tableRows.length > 0 ? tableRows : '<tr><td colspan="3" class="text-center p-4 text-gray-500">目前沒有紀錄。</td></tr>'}
+                                ${tableRows.length > 0 ? tableRows : '<tr><td colspan="3" class="text-center p-4 text-gray-500 bg-gray-700 rounded-lg">目前沒有紀錄。</td></tr>'}
                             </tbody>
                         </table>
                     </div>
@@ -536,7 +537,7 @@
             `;
         }
 
-        // --- 流程控制函數 ---
+        // --- 流程控制函數 (接續上一個被截斷的內容) ---
 
         /** 逐步顯示對話內容 */
         function displayNextDialogue() {
