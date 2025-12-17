@@ -157,7 +157,6 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        // *** 修正: 補上 setDoc 函式匯入，確保分數更新時不會出錯 ***
         import { getFirestore, doc, addDoc, setDoc, onSnapshot, collection, query, where, getDocs, serverTimestamp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- 全域 Firebase 狀態變數 ---
@@ -169,12 +168,30 @@
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
         
         const loadingScreen = document.getElementById('firebase-loading');
+        const container = document.getElementById('game-container'); // 重新取得容器
+
+        // A helper function to show a fatal error on the main screen
+        function showFatalError(message) {
+            loadingScreen.style.display = 'none'; // Hide the loading screen
+            container.innerHTML = `
+                <div class="text-center p-8 bg-red-900 rounded-lg border-2 border-red-500">
+                    <h2 class="text-3xl font-bold text-red-300 mb-4">❌ 資料庫連線失敗</h2>
+                    <p class="text-lg text-white mb-4">${message}</p>
+                    <p class="text-sm text-gray-300">請嘗試刷新頁面或稍後再試。</p>
+                </div>
+            `;
+            // Ensure the main container is visible and styled for error
+            container.className = 'bg-red-900 text-white p-6 md:p-10 rounded-xl shadow-2xl max-w-lg w-full transition-all duration-500';
+            document.body.className = 'min-h-screen flex items-center justify-center p-4 bg-gray-900';
+        }
 
         // Initialize and Authenticate Firebase
         async function initializeFirebase() {
             try {
                 if (!firebaseConfig) {
-                    console.error("Firebase configuration is missing.");
+                    // *** 關鍵修復點 1：如果環境變數沒有提供設定，直接顯示致命錯誤 ***
+                    console.error("Firebase configuration is missing or invalid from environment.");
+                    showFatalError("系統無法取得 Firebase 連線設定。");
                     return;
                 }
                 
@@ -219,8 +236,9 @@
                 setTimeout(() => loadingScreen.style.display = 'none', 500);
 
             } catch (error) {
-                console.error("Firebase initialization failed:", error);
-                loadingScreen.innerHTML = `<p class="text-red-400 text-lg">Firebase 連線失敗！請檢查設定。</p>`;
+                // *** 關鍵修復點 2：如果連線失敗 (例如權限或網路問題)，顯示連線錯誤 ***
+                console.error("Firebase initialization failed due to connection error:", error);
+                showFatalError(`連線錯誤: ${error.message || '無法連線到資料庫。'}`);
             }
         }
         
@@ -444,7 +462,7 @@
         ];
         
         // DOM 元素
-        const container = document.getElementById('game-container');
+        // 已經在檔案頂部定義了 const container = document.getElementById('game-container');
         const contentDiv = document.getElementById('game-content');
         const controlsDiv = document.getElementById('game-controls');
         const messageArea = document.getElementById('message-area');
@@ -1181,6 +1199,13 @@
             // 顯示載入畫面
             loadingScreen.style.display = 'flex'; 
             await initializeFirebase(); // 等待 Firebase 初始化完成
+            
+            // 檢查是否成功初始化 (如果失敗，showFatalError 已經被呼叫，會顯示錯誤方塊)
+            if (!isFirebaseInitialized) {
+                console.log("Firebase failed to initialize. Halting game start.");
+                return;
+            }
+
             console.log("Firebase ready. Starting game flow.");
             goToInitialImageScreen(); // 啟動遊戲流程
         }
