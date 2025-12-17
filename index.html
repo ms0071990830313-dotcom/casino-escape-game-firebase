@@ -112,6 +112,8 @@
                 console.log("Firebase: 等待匿名登入.");
             }
             window.isAuthReady = true;
+            
+            // 如果 initGame 已經在 window.onload 中觸發，這裡無需再次呼叫
         });
         
         // 將必要的 Firebase 函數暴露給主腳本
@@ -495,9 +497,9 @@
                 if (!wrapper) {
                     wrapper = document.createElement('div');
                     wrapper.id = 'dialogue-wrapper';
-                    wrapper.className = 'fade-transition space-y-4';
                     contentDiv.appendChild(wrapper);
                 }
+                wrapper.className = 'fade-transition space-y-4'; // 重設 className 以觸發淡入
                 
                 // 決定說話者樣式
                 const speakerClass = step.speaker === 'BOSS' ? 'text-yellow-400 font-bold' : 'text-green-400 font-bold';
@@ -603,12 +605,15 @@
             initialButton.onclick = () => {
                 if (!initialButton.disabled) {
                     // 執行 Firebase 匿名登入
-                    fs.signInAnonymously(auth).then(() => {
-                        console.log("Anonymous sign-in triggered.");
-                    }).catch(error => {
-                        console.error("Anonymous sign-in failed:", error);
-                        showMessage("連線至伺服器失敗，請檢查網路。", true);
-                    });
+                    // 只有在 Firebase 載入成功且未登入時才執行登入 (避免重複登入)
+                    if (window.auth && !window.auth.currentUser) {
+                        fs.signInAnonymously(auth).then(() => {
+                            console.log("Anonymous sign-in triggered.");
+                        }).catch(error => {
+                            console.error("Anonymous sign-in failed:", error);
+                            showMessage("連線至伺服器失敗，請檢查網路。", true);
+                        });
+                    }
                     goToBossSelection();
                 } else {
                     showMessage("請確保上方兩項皆已確認", true);
