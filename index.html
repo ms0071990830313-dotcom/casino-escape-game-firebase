@@ -103,7 +103,7 @@
         // 設置日誌級別，幫助調試
         setLogLevel('error');
         
-        // --- 3. 監聽認證狀態並初始化遊戲 ---
+        // --- 3. 監聽認證狀態並準備初始化遊戲 (不在此處直接呼叫 initGame) ---
         onAuthStateChanged(window.auth, (user) => {
             if (user) {
                 window.currentUserId = user.uid;
@@ -112,12 +112,6 @@
                 console.log("Firebase: 等待匿名登入.");
             }
             window.isAuthReady = true;
-            // 確保遊戲在認證就緒後啟動
-            if (document.readyState === 'loading') {
-                window.onload = initGame;
-            } else {
-                initGame();
-            }
         });
         
         // 將必要的 Firebase 函數暴露給主腳本
@@ -234,7 +228,7 @@
 
         // --- 遊戲初始化入口 ---
         function initGame() {
-            // *** 修正點：在函數內部獲取 DOM 元素，確保它們已定義 ***
+            // *** 修正點 1: 在函數內部獲取 DOM 元素，確保它們已定義 ***
             container = document.getElementById('game-container');
             contentDiv = document.getElementById('game-content');
             controlsDiv = document.getElementById('game-controls');
@@ -1117,8 +1111,8 @@
         }
 
         // --- 啟動遊戲 ---
-        // window.onload 現已由 onAuthStateChanged 處理
-        // 如果瀏覽器支持，會在 <script type="module"> 中調用 initGame
+        // 修正點 3: 確保在 DOM 載入後，initGame 被呼叫
+        window.onload = initGame;
         
     </script>
 </body>
