@@ -73,9 +73,42 @@
             opacity: 0;
             transition: opacity 0.2s;
         }
+        /* 載入畫面樣式 */
+        #firebase-loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(26, 26, 46, 0.95);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            transition: opacity 0.5s;
+        }
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.1);
+            border-top: 4px solid #ffeb3b;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body class="min-h-screen flex items-center justify-center p-4">
+
+    <!-- Firebase 載入畫面 -->
+    <div id="firebase-loading">
+        <div class="spinner mb-4"></div>
+        <p class="text-white text-lg">正在建立秘密連線 (Firebase)...</p>
+    </div>
 
     <!-- 背景音樂 -->
     <audio id="bgm" loop>
@@ -124,7 +157,8 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, addDoc, onSnapshot, collection, query, where, getDocs, serverTimestamp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        // *** 修正: 補上 setDoc 函式匯入，確保分數更新時不會出錯 ***
+        import { getFirestore, doc, addDoc, setDoc, onSnapshot, collection, query, where, getDocs, serverTimestamp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- 全域 Firebase 狀態變數 ---
         let app, db, auth, userId = 'anonymous';
@@ -133,6 +167,8 @@
         // Configuration variables (provided by Canvas environment)
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+        
+        const loadingScreen = document.getElementById('firebase-loading');
 
         // Initialize and Authenticate Firebase
         async function initializeFirebase() {
@@ -178,9 +214,13 @@
                 
                 isFirebaseInitialized = true;
                 console.log("Firebase initialized and authenticated.");
+                // 隱藏載入畫面
+                loadingScreen.style.opacity = 0;
+                setTimeout(() => loadingScreen.style.display = 'none', 500);
 
             } catch (error) {
                 console.error("Firebase initialization failed:", error);
+                loadingScreen.innerHTML = `<p class="text-red-400 text-lg">Firebase 連線失敗！請檢查設定。</p>`;
             }
         }
         
@@ -1138,6 +1178,8 @@
         // --- 啟動遊戲：等待 Firebase 初始化完成 ---
         async function mainGameLoad() {
             console.log("Starting Firebase initialization...");
+            // 顯示載入畫面
+            loadingScreen.style.display = 'flex'; 
             await initializeFirebase(); // 等待 Firebase 初始化完成
             console.log("Firebase ready. Starting game flow.");
             goToInitialImageScreen(); // 啟動遊戲流程
