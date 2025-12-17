@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>黑色追緝令：賭場風雲 - Firebase版</title>
+    <title>黑色追緝令：賭場風雲</title>
     <!-- 載入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=Noto+Sans+TC:wght@400;700&display=swap" rel="stylesheet">
@@ -73,44 +73,61 @@
             opacity: 0;
             transition: opacity 0.2s;
         }
-        /* 載入畫面樣式 */
-        #firebase-loading {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(26, 26, 46, 0.95);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            z-index: 1000;
-            transition: opacity 0.5s;
-        }
-        .spinner {
-            border: 4px solid rgba(255, 255, 255, 0.1);
-            border-top: 4px solid #ffeb3b;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
     </style>
+    
+    <!-- 引入 Firebase SDK -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, serverTimestamp, query, where, orderBy, getDocs, Timestamp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        // --- 1. 您的 Firebase 專案設定 ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyCR-oc58h8fmdqt-7VU1F9hstznu0l0vvQ",
+            authDomain: "casini-game.firebaseapp.com",
+            projectId: "casini-game",
+            storageBucket: "casini-game.firebasestorage.app",
+            messagingSenderId: "615777698848",
+            appId: "1:615777698848:web:a6ec9b8eb872168d86a845"
+        };
+        
+        // --- 2. 初始化並定義全域變數 ---
+        window.firebaseApp = initializeApp(firebaseConfig);
+        window.db = getFirestore(window.firebaseApp);
+        window.auth = getAuth(window.firebaseApp);
+        // 設定 App ID 作為資料庫路徑的一部分 (這裡使用 projectId)
+        window.APP_ID = firebaseConfig.projectId;
+        window.currentUserId = null;
+        window.isAuthReady = false;
+
+        // 設置日誌級別，幫助調試
+        setLogLevel('error');
+        
+        // --- 3. 監聽認證狀態並初始化遊戲 ---
+        onAuthStateChanged(window.auth, (user) => {
+            if (user) {
+                window.currentUserId = user.uid;
+                console.log("Firebase: 匿名登入成功. User ID:", user.uid);
+            } else {
+                console.log("Firebase: 等待匿名登入.");
+            }
+            window.isAuthReady = true;
+            // 確保遊戲在認證就緒後啟動
+            if (document.readyState === 'loading') {
+                window.onload = initGame;
+            } else {
+                initGame();
+            }
+        });
+        
+        // 將必要的 Firebase 函數暴露給主腳本
+        window.fs = { collection, addDoc, serverTimestamp, query, where, orderBy, getDocs, Timestamp, signInAnonymously };
+
+    </script>
 </head>
 <body class="min-h-screen flex items-center justify-center p-4">
 
-    <!-- Firebase 載入畫面 -->
-    <div id="firebase-loading">
-        <div class="spinner mb-4"></div>
-        <p class="text-white text-lg">正在建立秘密連線 (Firebase)...</p>
-    </div>
-
-    <!-- 背景音樂 -->
+    <!-- 背景音樂 (請確保此檔案名稱 Mission Impossible Theme (Full Theme).mp3 已在 GitHub 根目錄且名稱完全一致) -->
     <audio id="bgm" loop>
         <source src="Mission Impossible Theme (Full Theme).mp3" type="audio/mp3">
         您的瀏覽器不支持音頻播放。
@@ -153,277 +170,22 @@
 
     </div>
 
-    <!-- Firebase SDK 引用 -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, addDoc, setDoc, onSnapshot, collection, query, where, getDocs, serverTimestamp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // --- 全域 Firebase 狀態變數 ---
-        let app, db, auth, userId = 'anonymous';
-        let isFirebaseInitialized = false;
-
-        // Configuration variables (provided by Canvas environment)
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+    <script type="text/javascript">
+        // --- Firebase 全域變數定義 ---
+        let db = null;
+        let auth = null;
+        let APP_ID = null;
+        let currentUserId = null;
+        let isAuthReady = false;
         
-        const loadingScreen = document.getElementById('firebase-loading');
-        const container = document.getElementById('game-container'); // 重新取得容器
-
-        // A helper function to show a fatal error on the main screen
-        function showFatalError(message) {
-            loadingScreen.style.display = 'none'; // Hide the loading screen
-            container.innerHTML = `
-                <div class="text-center p-8 bg-red-900 rounded-lg border-2 border-red-500">
-                    <h2 class="text-3xl font-bold text-red-300 mb-4">❌ 資料庫連線失敗</h2>
-                    <p class="text-lg text-white mb-4">${message}</p>
-                    <p class="text-sm text-gray-300">請嘗試刷新頁面或稍後再試。</p>
-                </div>
-            `;
-            // Ensure the main container is visible and styled for error
-            container.className = 'bg-red-900 text-white p-6 md:p-10 rounded-xl shadow-2xl max-w-lg w-full transition-all duration-500';
-            document.body.className = 'min-h-screen flex items-center justify-center p-4 bg-gray-900';
-        }
-
-        // Initialize and Authenticate Firebase
-        async function initializeFirebase() {
-            try {
-                if (!firebaseConfig) {
-                    // *** 關鍵修復點 1：如果環境變數沒有提供設定，直接顯示致命錯誤 ***
-                    console.error("Firebase configuration is missing or invalid from environment.");
-                    showFatalError("系統無法取得 Firebase 連線設定。");
-                    return;
-                }
-                
-                // setLogLevel('debug'); // 開啟詳細日誌以供偵錯
-                app = initializeApp(firebaseConfig);
-                db = getFirestore(app);
-                auth = getAuth(app);
-                
-                // 執行身份驗證：優先使用 custom token，否則匿名登入
-                await new Promise(resolve => {
-                    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-                        unsubscribe(); // 首次檢查後停止監聽
-                        if (user) {
-                            userId = user.uid;
-                            console.log("Authenticated user:", userId);
-                            resolve();
-                        } else {
-                            if (typeof __initial_auth_token !== 'undefined') {
-                                try {
-                                    const userCredential = await signInWithCustomToken(auth, __initial_auth_token);
-                                    userId = userCredential.user.uid;
-                                    console.log("Signed in with custom token:", userId);
-                                } catch (error) {
-                                    console.error("Custom token sign-in failed. Falling back to anonymous.", error);
-                                    const userCredential = await signInAnonymously(auth);
-                                    userId = userCredential.user.uid;
-                                }
-                            } else {
-                                const userCredential = await signInAnonymously(auth);
-                                userId = userCredential.user.uid;
-                                console.log("Signed in anonymously:", userId);
-                            }
-                            resolve();
-                        }
-                    });
-                });
-                
-                isFirebaseInitialized = true;
-                console.log("Firebase initialized and authenticated.");
-                // 隱藏載入畫面
-                loadingScreen.style.opacity = 0;
-                setTimeout(() => loadingScreen.style.display = 'none', 500);
-
-            } catch (error) {
-                // *** 關鍵修復點 2：如果連線失敗 (例如權限或網路問題)，顯示連線錯誤 ***
-                console.error("Firebase initialization failed due to connection error:", error);
-                showFatalError(`連線錯誤: ${error.message || '無法連線到資料庫。'}`);
-            }
-        }
-        
-        /** 取得今天的日期字串 YYYY-MM-DD */
-        function getTodayDateString() {
-            const now = new Date();
-            const year = now.getFullYear();
-            const month = String(now.getMonth() + 1).padStart(2, '0');
-            const day = String(now.getDate()).padStart(2, '0');
-            return `${year}-${month}-${day}`;
-        }
-
-        /** 將通關紀錄儲存到 Firestore */
-        async function saveScore() {
-            if (!isFirebaseInitialized || !db) {
-                console.error("Firebase not ready. Cannot save score.");
-                showMessage("分數儲存失敗：Firebase尚未連線。", true);
-                return;
-            }
-
-            const todayDate = getTodayDateString();
-            // 公開資料 Collection 路徑
-            const dailyScoresCollectionPath = `artifacts/${appId}/public/data/daily_scores`;
-            const scoresRef = collection(db, dailyScoresCollectionPath);
-            
-            console.log(`[SaveScore] Attempting to save score for user: ${userId}, Date: ${todayDate}, Time: ${completionTime}s`);
-            
-            try {
-                // 1. 檢查是否已經有今日紀錄 (使用 userId 和 date 查詢)
-                const q = query(scoresRef, 
-                    where("userId", "==", userId),
-                    where("date", "==", todayDate)
-                );
-                const existingDocs = await getDocs(q);
-
-                if (existingDocs.docs.length > 0) {
-                    // 如果用戶今天已經有紀錄
-                    const existingDoc = existingDocs.docs[0];
-                    const existingTime = existingDoc.data().completionTime;
-                    
-                    if (completionTime < existingTime) {
-                         // 2. 如果新紀錄更快，則更新
-                         await setDoc(existingDoc.ref, {
-                            completionTime: completionTime,
-                            timestamp: serverTimestamp(),
-                        }, { merge: true });
-                        console.log("[SaveScore] Updated high score for today.");
-                    } else {
-                        // 3. 如果舊紀錄更快，則使用舊紀錄的時間來排名
-                        completionTime = existingTime;
-                        console.log("[SaveScore] Existing score is faster or equal. Skip update, use existing time for ranking.");
-                    }
-                } else {
-                    // 4. 否則新增一筆新的紀錄
-                    const newDoc = {
-                        playerName: playerName,
-                        completionTime: completionTime, // 單位：秒
-                        timestamp: serverTimestamp(),
-                        userId: userId,
-                        date: todayDate,
-                        bossId: selectedBossId 
-                    };
-                    const docRef = await addDoc(scoresRef, newDoc);
-                    console.log("[SaveScore] New score added successfully. Doc ID:", docRef.id);
-                }
-
-                // 儲存後立即獲取並顯示排名 (使用 onSnapshot 實現即時更新)
-                fetchAndDisplayRankings();
-
-            } catch (error) {
-                console.error("[SaveScore] Failed to save or check score:", error);
-                showMessage("分數儲存失敗，請截圖後聯繫工作人員！", true);
-            }
-        }
-
-        /** 獲取並顯示當日排行榜和玩家排名 (即時監聽) */
-        function fetchAndDisplayRankings() {
-            if (!isFirebaseInitialized || !db) {
-                console.error("Firebase not ready. Cannot fetch rankings.");
-                return;
-            }
-            
-            const todayDate = getTodayDateString();
-            const dailyScoresCollectionPath = `artifacts/${appId}/public/data/daily_scores`;
-            const scoresRef = collection(db, dailyScoresCollectionPath);
-            
-            const leaderboardDiv = document.getElementById('leaderboard-area');
-            if (!leaderboardDiv) {
-                console.error("Leaderboard area element not found.");
-                return;
-            }
-            
-            // 設置 onSnapshot 監聽器以獲取今日排行榜
-            const q = query(scoresRef, where("date", "==", todayDate));
-            
-            // onSnapshot 會在資料有變動時自動執行
-            const unsubscribe = onSnapshot(q, (snapshot) => {
-                console.log(`[Leaderboard] Received snapshot with ${snapshot.size} scores for ${todayDate}.`);
-                let allScores = [];
-                snapshot.forEach((doc) => {
-                    allScores.push({ id: doc.id, ...doc.data() });
-                });
-
-                // 2. 客戶端排序：依據 completionTime 升冪排列 (時間短的排前面)
-                allScores.sort((a, b) => a.completionTime - b.completionTime);
-
-                
-                // 3. 確定玩家的排名
-                let playerRank = -1;
-                // 使用通關時計算的 completionTime 作為預設，或者等待 onSnapshot 更新
-                let playerBestTime = completionTime; 
-                let playerEntry = allScores.find(score => score.userId === userId);
-                
-                if (playerEntry) {
-                    // 如果在排行榜中找到玩家紀錄，以資料庫中的時間為準 (因為可能是更新後的最佳時間)
-                    playerBestTime = playerEntry.completionTime;
-                    playerRank = allScores.findIndex(score => score.userId === userId) + 1;
-                    console.log(`[Leaderboard] Player Rank: ${playerRank}, Best Time: ${playerBestTime}s`);
-                } else {
-                    console.log("[Leaderboard] Player entry not found in the current snapshot.");
-                    // 如果紀錄尚未載入，則使用當前通關時間，但排名暫時未知
-                    playerRank = -1; 
-                }
-                
-                // 4. 渲染結果
-                let rankingHTML = `
-                    <div class="p-4 bg-gray-800 rounded-lg shadow-xl mb-4">
-                        <p class="text-xl font-bold text-yellow-400">通關結果</p>
-                        <p class="text-3xl font-extrabold text-red-500 mt-2">
-                            你是第 <span class="text-5xl">${playerRank !== -1 ? playerRank : '...'}</span> 位成功挑戰的特務！
-                        </p>
-                        <p class="text-md text-gray-300 mt-1">
-                            你今日最佳紀錄：${playerBestTime} 秒
-                        </p>
-                        <p class="text-sm text-gray-400 mt-2">
-                            <span class="font-bold">今日排行 (${todayDate}) (即時更新):</span>
-                        </p>
-                        <ul class="mt-2 space-y-2 max-h-48 overflow-y-auto pr-2">
-                `;
-
-                // 顯示前 10 名
-                allScores.slice(0, 10).forEach((score, index) => {
-                    const rank = index + 1;
-                    const isPlayer = score.userId === userId;
-                    // 如果玩家紀錄的時間和該名次時間一致 (有可能多人同秒)，則高亮
-                    const isHighlighted = isPlayer || (score.completionTime === playerBestTime && rank === playerRank);
-                    const rankClass = rank === 1 ? 'text-amber-500 text-lg font-bold' : (isHighlighted ? 'text-green-400 font-bold' : 'text-gray-200');
-                    
-                    // 確保 playerName 存在，否則使用 User ID
-                    const displayPlayerName = score.playerName || `匿名特務 (${score.userId.substring(0, 4)}...)`;
-
-                    rankingHTML += `
-                        <li class="flex justify-between items-center p-2 rounded-md ${isHighlighted ? 'bg-green-900 border border-green-500' : 'bg-gray-700'}">
-                            <span class="${rankClass}">#${rank} ${displayPlayerName}</span>
-                            <span class="text-yellow-300">${score.completionTime} 秒</span>
-                        </li>
-                    `;
-                });
-                
-                if (allScores.length === 0) {
-                     rankingHTML += `<li class="text-gray-400 text-center py-4">今日尚未有通關紀錄。</li>`;
-                }
-
-                rankingHTML += `
-                        </ul>
-                    </div>
-                `;
-                
-                leaderboardDiv.innerHTML = rankingHTML;
-                
-            }, (error) => {
-                // *** 新增的錯誤處理 ***
-                console.error("[Leaderboard] Error fetching daily scores with onSnapshot:", error);
-                leaderboardDiv.innerHTML = `<div class="text-red-400 p-4 bg-gray-700 rounded-lg">載入排行榜失敗：${error.code || '未知錯誤'}。請檢查網路連線或權限設定。</div>`;
-            });
-        }
-
         // --- 遊戲狀態管理 ---
         const GAME_STATE = {
-            START: 0,       
-            VAULT_LOCATE: 1, 
-            CLUE_HUNT: 2,    
-            CODE_ENTRY: 3,   
-            SUCCESS: 4,      
-            FAIL: 5          
+            START: 0,       // 遊戲開始敘事畫面
+            VAULT_LOCATE: 1, // 確認金庫位數
+            CLUE_HUNT: 2,    // 尋找金庫守則
+            CODE_ENTRY: 3,   // 輸入密碼
+            SUCCESS: 4,      // 成功
+            FAIL: 5          // 失敗
         };
 
         const CORRECT_CLUE = "金庫守則";
@@ -445,13 +207,8 @@
         // 密碼提示相關
         let hintsRevealed = 0; 
         
-        // *** HINTS 陣列內容 ***
-        const HINTS = [
-            "你有發現金庫上面的提示「老大才能碰」，老大在賭場裡的花色通常是代表『黑桃』，但是金庫守則上似乎不只有一種顏色的『黑桃』⋯⋯",
-            "金庫守則上似乎有很多不同顏色的筆畫，仔細看看好像是數字⋯⋯也許這跟密碼有什麼關係？",
-            "金庫密碼是三位數，紅色的黑桃也是三個⋯⋯剩下就是每個黑桃分別代表哪個數字了⋯⋯"
-        ];
-        // *** HINTS 陣列結束 ***
+        // *** DOM 元素宣告 (修復點：確保它們有預設值，且在 initGame 中獲取) ***
+        let container, contentDiv, controlsDiv, messageArea, timerDisplay, bgm, successSound, lateSound;
 
         // *** 對話內容 (由老大敘事) ***
         let currentDialogueStep = 0; 
@@ -471,36 +228,55 @@
                 action: 'START_MISSION'
             }
         ];
+
+        // --- Firebase 函式庫參考 ---
+        let fs = null;
+
+        // --- 遊戲初始化入口 ---
+        function initGame() {
+            // *** 修正點：在函數內部獲取 DOM 元素，確保它們已定義 ***
+            container = document.getElementById('game-container');
+            contentDiv = document.getElementById('game-content');
+            controlsDiv = document.getElementById('game-controls');
+            messageArea = document.getElementById('message-area');
+            timerDisplay = document.getElementById('timer-display');
+            bgm = document.getElementById('bgm');
+            successSound = document.getElementById('success-sound');
+            lateSound = document.getElementById('late-sound');
+            
+            // 從 Window 範圍獲取 Firebase 實例
+            db = window.db;
+            auth = window.auth;
+            APP_ID = window.APP_ID;
+            fs = window.fs;
+            currentUserId = window.currentUserId;
+            isAuthReady = window.isAuthReady;
+
+            // 確保 Firebase 變數已成功初始化
+            if (!db || !auth || !APP_ID || !fs) {
+                console.error("Firebase SDK 載入失敗或初始化未完成.");
+                // 如果 Firebase 初始化失敗，仍允許遊戲啟動，但不執行紀錄功能
+                goToInitialImageScreen();
+                return;
+            }
+            
+            goToInitialImageScreen();
+        }
         
-        // DOM 元素
-        // 已經在檔案頂部定義了 const container = document.getElementById('game-container');
-        const contentDiv = document.getElementById('game-content');
-        const controlsDiv = document.getElementById('game-controls');
-        const messageArea = document.getElementById('message-area');
-        const timerDisplay = document.getElementById('timer-display');
-        const bgm = document.getElementById('bgm'); 
-        const successSound = document.getElementById('success-sound'); 
-        const lateSound = document.getElementById('late-sound');     
-
-
-        // --- 音樂播放邏輯 ---
+        // --- 音樂/計時器/輔助函數 (略，內容與之前相同) ---
         function startBGM() {
             if (bgm && bgm.paused) {
                 bgm.volume = 0.5;
-                console.log("BGM 嘗試啟動: Mission Impossible Theme");
                 bgm.play().catch(error => {
                     console.log("BGM 自動播放失敗，可能是瀏覽器限制。", error);
                 });
             }
         }
-
-        // --- 計時器邏輯 ---
         function formatTime(seconds) {
             const minutes = Math.floor(seconds / 60);
             const remainingSeconds = seconds % 60;
             return `${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`;
         }
-
         function updateTimer() {
             if (timeLeft < 0) {
                 timeLeft = 0;
@@ -526,7 +302,6 @@
             }
             timeLeft--;
         }
-
         function startTimer() {
             if (timerInterval) clearInterval(timerInterval);
             timeLeft = INITIAL_TIME_SECONDS;
@@ -534,17 +309,12 @@
             updateTimer(); 
             timerInterval = setInterval(updateTimer, 1000);
         }
-
         function stopTimer() {
             if (timerInterval) {
                 clearInterval(timerInterval);
                 timerInterval = null;
             }
         }
-
-
-        // --- 輔助函數 ---
-
         function showMessage(text, isError = false) {
             messageArea.textContent = text;
             messageArea.className = `mt-4 p-3 rounded-lg text-center font-bold ${isError ? 'bg-red-700' : 'bg-green-700'}`;
@@ -553,12 +323,10 @@
                 messageArea.classList.add('hidden');
             }, 3000);
         }
-
         function clearScreen() {
             contentDiv.innerHTML = '';
             controlsDiv.innerHTML = '';
         }
-
         function renderButton(text, onClick, isFinalStep = false, id = null) {
             const button = document.createElement('button');
             button.textContent = text;
@@ -567,7 +335,6 @@
             if (id) button.id = id;
             controlsDiv.appendChild(button);
         }
-
         function renderInput(placeholder, buttonText, onSubmit, inputId, maxLength) {
             const constContainer = document.createElement('div');
             constContainer.className = 'flex flex-col space-y-3';
@@ -594,7 +361,6 @@
             constContainer.appendChild(button);
             controlsDiv.appendChild(constContainer);
         }
-
         function revealHint() {
             if (hintsRevealed >= HINTS.length) {
                 showMessage("已經沒有更多提示了！", true);
@@ -631,7 +397,84 @@
             }
         }
 
-        // --- 敘事和流程控制 ---
+        // --- 核心邏輯：紀錄通關時間與排名計算 ---
+
+        /** 取得 Firestore 排名 Collection 的路徑 */
+        function getPublicRanksCollectionRef() {
+            if (!db || !APP_ID) {
+                console.error("Firestore DB 或 APP_ID 尚未初始化.");
+                return null;
+            }
+            // 使用公共路徑 /artifacts/{appId}/public/data/{collectionName}
+            return fs.collection(db, `artifacts/${APP_ID}/public/data/puzzle_ranks`);
+        }
+
+        /** 寫入通關紀錄並獲取排名 */
+        async function recordCompletionAndShowRank(isLate) {
+            if (!db || !currentUserId) {
+                console.error("無法寫入紀錄：Firebase 或 User ID 尚未準備好。");
+                return { rank: 'N/A', totalRecords: 'N/A' };
+            }
+
+            const ranksRef = getPublicRanksCollectionRef();
+            if (!ranksRef) return { rank: 'N/A', totalRecords: 'N/A' };
+
+            const newRecord = {
+                name: playerName,
+                userId: currentUserId,
+                completionTime: completionTime,
+                timestamp: fs.serverTimestamp(), // 使用伺服器時間確保排序精確
+                isLate: isLate,
+                bossId: selectedBossId
+            };
+            
+            // 1. 寫入新的通關紀錄
+            let docRef;
+            try {
+                docRef = await fs.addDoc(ranksRef, newRecord);
+                console.log("Record added with ID:", docRef.id);
+            } catch (e) {
+                console.error("Error adding document:", e);
+                return { rank: 'Error', totalRecords: 'Error' };
+            }
+
+            // 2. 獲取當天的所有紀錄並排序
+            
+            // 獲取當天零點的時間戳 (用於每日重設篩選)
+            const todayStart = new Date();
+            todayStart.setHours(0, 0, 0, 0); 
+            const todayTimestamp = fs.Timestamp.fromDate(todayStart);
+
+            // 查詢當天所有紀錄，按時間升序排列
+            const q = fs.query(
+                ranksRef,
+                fs.where("timestamp", ">=", todayTimestamp), 
+                fs.orderBy("timestamp", "asc")
+            );
+
+            try {
+                const querySnapshot = await fs.getDocs(q);
+                let rank = 'N/A';
+                const totalRecords = querySnapshot.docs.length;
+
+                // 3. 計算排名
+                querySnapshot.docs.forEach((doc, index) => {
+                    // 檢查 userId 是否匹配，或者檢查文檔ID是否匹配
+                    if (doc.id === docRef.id) {
+                        rank = index + 1;
+                    }
+                });
+                
+                return { rank: rank, totalRecords: totalRecords };
+
+            } catch (e) {
+                console.error("Error fetching documents:", e);
+                return { rank: 'Error', totalRecords: 'Error' };
+            }
+        }
+
+
+        // --- 流程控制函數 ---
 
         /** 逐步顯示對話內容 */
         function displayNextDialogue() {
@@ -694,10 +537,7 @@
         }
 
         
-        /**
-         * 前置階段: 初始圖片畫面
-         * 新增：勾選框驗證邏輯
-         */
+        /** 前置階段: 初始圖片畫面 */
         function goToInitialImageScreen() {
             clearScreen();
             stopTimer(); 
@@ -708,6 +548,7 @@
 
             contentDiv.innerHTML = `
                 <div class="text-center space-y-6">
+                    <!-- 移除冗餘的 H2 標題 -->
                     <p class="text-lg text-gray-300">一場秘密行動即將展開...</p>
                     
                     <!-- 初始圖片：cover.jpg -->
@@ -767,6 +608,13 @@
             // --- 處理按鈕點擊 (即使被禁用也需要檢查) ---
             initialButton.onclick = () => {
                 if (!initialButton.disabled) {
+                    // 執行 Firebase 匿名登入
+                    fs.signInAnonymously(auth).then(() => {
+                        console.log("Anonymous sign-in triggered.");
+                    }).catch(error => {
+                        console.error("Anonymous sign-in failed:", error);
+                        showMessage("連線至伺服器失敗，請檢查網路。", true);
+                    });
                     goToBossSelection();
                 } else {
                     showMessage("請確保上方兩項皆已確認", true);
@@ -776,6 +624,7 @@
 
         /** 新增：老大選擇頁面 */
         function goToBossSelection() {
+            // ... (老大選擇頁面邏輯不變)
             clearScreen();
             window.scrollTo(0, 0);
             selectedBossId = null; // 重置選擇
@@ -798,7 +647,14 @@
             confirmButton.disabled = true; // 預設禁用
             confirmButton.className = 'gold-button bg-gray-500 cursor-not-allowed text-white px-6 py-3 rounded-lg w-full mt-6 transition-all duration-200';
             
-            confirmButton.onclick = goToNameInput;
+            // 只有當 Auth Ready 且選完老大後才能進入下一步
+            confirmButton.onclick = () => {
+                 if (isAuthReady && currentUserId) {
+                    goToNameInput();
+                 } else {
+                    showMessage("伺服器連線中，請稍候再試。", true);
+                 }
+            };
             controlsDiv.appendChild(confirmButton);
 
 
@@ -812,6 +668,7 @@
                 item.setAttribute('data-boss-id', id);
                 item.onclick = () => selectBoss(id);
 
+                // 請確保您已上傳 boss_1.png 到 boss_9.png
                 item.innerHTML = `
                     <img src="boss_${id}.png" 
                          onerror="this.onerror=null; this.src='https://placehold.co/100x100/3A3A3A/FFF?text=Boss%20${id}';"
@@ -839,10 +696,12 @@
                     }
                 });
 
-                // 啟用按鈕
-                confirmButton.disabled = false;
-                confirmButton.classList.remove('bg-gray-500', 'cursor-not-allowed');
-                confirmButton.classList.add('bg-yellow-500', 'hover:bg-yellow-600');
+                // 啟用按鈕 (如果 Auth 已準備好)
+                if (isAuthReady) {
+                    confirmButton.disabled = false;
+                    confirmButton.classList.remove('bg-gray-500', 'cursor-not-allowed');
+                    confirmButton.classList.add('bg-yellow-500', 'hover:bg-yellow-600');
+                }
             }
         }
 
@@ -851,13 +710,13 @@
             clearScreen();
             window.scrollTo(0, 0);
             
+            // 設置容器樣式
             document.body.className = 'min-h-screen flex items-center justify-center p-4';
             container.className = 'bg-gray-800 text-white p-6 md:p-10 rounded-xl shadow-2xl max-w-lg w-full transition-all duration-500';
 
             contentDiv.innerHTML = `
                 <h2 class="text-2xl font-bold text-yellow-400 text-center mb-6">告訴老大你的代號</h2>
                 <p class="text-md text-gray-400 text-center">這是你獨一無二的身份，將用於紀錄你的通關順序。</p>
-                <p class="text-sm text-gray-500 text-center mt-2">（你的使用者 ID: ${userId}）</p>
             `;
 
             // 定義提交名稱的函數
@@ -873,7 +732,7 @@
             };
 
             // 渲染輸入框和按鈕
-            renderInput("請輸入你的黑幫化名（2-10個字）", "確認代號", submitName, 'codename-input', 10); 
+            renderInput("請輸入你的黑幫化名（2-10個字）", "確認代號", submitName, 'codename-input', 10); // <-- 已修改輸入框提示文字
             document.getElementById('codename-input').focus();
         }
 
@@ -905,6 +764,7 @@
                 </div>
             `;
             
+            // 準備對話內容的包裹器
             const dialogueArea = document.getElementById('dialogue-content-area');
             const wrapper = document.createElement('div');
             wrapper.id = 'dialogue-wrapper';
@@ -966,14 +826,17 @@
         function goToClueHunt() {
             currentState = GAME_STATE.CLUE_HUNT;
             clearScreen();
-            window.scrollTo(0, 0); 
+            window.scrollTo(0, 0); // 自動捲動到最上面
+            // Timer is already running
 
             contentDiv.innerHTML = `
                 <p>你確認了，金庫鎖需要<strong>三位數密碼</strong>才能打開。同時，你發現<strong>金庫上有一個提示</strong>寫著什麼⋯⋯。</p>
                 <p>金庫密碼每天都會換，但你事前已經調查過，賭場主人記性很差，<strong>相關的提示一定就在金庫附近</strong>。</p>
                 <hr class="my-4 border-gray-600">
                 <p class="text-yellow-400"><strong>【行動指示：第二步】</strong></p>
+                <!-- --- 修改點 3: 提示文字 --- -->
                 <p>環顧四周，尋找周邊物品，什麼東西看起來像是在提供密碼的線索？</p>
+                <!-- --- 修改點 3 結束 --- -->
             `;
 
             renderInput("請輸入你發現的線索名稱 (例如：紙條、便籤)", "確認線索", checkClue, 'clue-input');
@@ -986,7 +849,7 @@
             if (normalizedInput === CORRECT_CLUE.toLowerCase()) {
                 showMessage("線索確認！這就是我們要找的！", false);
                 setTimeout(() => {
-                    window.scrollTo(0, 0); 
+                    window.scrollTo(0, 0); // 自動捲動到最上面
                     goToCodeEntry();
                 }, 1500);
             } else {
@@ -1004,7 +867,7 @@
         function goToCodeEntry() {
             currentState = GAME_STATE.CODE_ENTRY;
             clearScreen();
-            window.scrollTo(0, 0); 
+            window.scrollTo(0, 0); // 自動捲動到最上面
 
             contentDiv.innerHTML = `
                 <p>很好，你已經掌握了關鍵線索：<strong>【金庫守則】</strong>。</p>
@@ -1075,9 +938,9 @@
                 completionTime = Math.floor((Date.now() - missionStartTime) / 1000); 
 
                 if (timeLeft <= 0) {
-                    setTimeout(goToLateSuccess, 2000); 
+                    setTimeout(() => goToLateSuccess(true), 2000); // 傳遞 isLate=true
                 } else {
-                    setTimeout(goToSuccess, 2000); 
+                    setTimeout(() => goToSuccess(false), 2000); // 傳遞 isLate=false
                 }
             } else {
                 // *** 密碼錯誤時扣除 30 秒 ***
@@ -1096,8 +959,11 @@
             }
         }
 
-        /** 階段 4a: 正常成功畫面 (時間內完成) */
-        function goToSuccess() {
+        /**
+         * 階段 4a: 正常成功畫面 (時間內完成)
+         * 新增：Firebase 紀錄與排名顯示
+         */
+        async function goToSuccess(isLate) {
             currentState = GAME_STATE.SUCCESS;
             
             // 停止 BGM 並播放成功音效
@@ -1108,7 +974,19 @@
             timerDisplay.classList.add('hidden');
             clearScreen();
             window.scrollTo(0, 0);
-            
+
+            // 顯示載入中
+            contentDiv.innerHTML = `
+                <div class="text-center py-10">
+                    <h2 class="text-3xl font-bold text-yellow-400 mb-4">正在計算您的排名...</h2>
+                    <p class="text-lg text-gray-400">正在等待伺服器確認您的通關紀錄。</p>
+                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-yellow-500 mx-auto mt-6"></div>
+                </div>
+            `;
+
+            // --- Firebase 紀錄與排名計算 ---
+            const { rank, totalRecords } = await recordCompletionAndShowRank(isLate);
+
             document.body.className = 'min-h-screen flex items-center justify-center p-4 success-bg';
             container.className = 'bg-yellow-100 text-gray-900 p-6 md:p-10 rounded-xl shadow-2xl max-w-lg w-full transition-all duration-500 border-4 border-yellow-700';
             
@@ -1117,6 +995,25 @@
                     <h2 class="text-4xl md:text-5xl font-extrabold text-yellow-700 mt-4 animate-bounce">
                         你成功打開金庫！
                     </h2>
+                    <!-- 顯示代號與時間 -->
+                    <p class="text-xl font-bold mb-2">
+                        代號: <span class="text-red-600">${playerName}</span>
+                    </p>
+                    <p class="text-2xl font-extrabold mb-4 text-red-700">
+                        耗時: ${completionTime} 秒
+                    </p>
+                    <!-- 顯示排名 -->
+                    <p class="text-lg font-semibold mb-6 p-2 bg-yellow-200 rounded-lg shadow-md">
+                        🎉 今日第 <span class="text-red-700 font-extrabold">${rank}</span> 位通關玩家! (共 ${totalRecords} 筆紀錄)
+                    </p>
+
+                    <!-- 圖片佔位符：金幣成功圖 -->
+                    <img src="SUCCESS_IMAGE.png" 
+                         onerror="this.onerror=null; this.src='https://placehold.co/200x150/FFD700/000?text=金幣成功圖';"
+                         alt="金幣成功圖" 
+                         class="mx-auto w-1/2 max-w-sm object-contain mb-4 shadow-lg"
+                    >
+                    
                     <p class="mt-6 text-xl">
                         金山銀山就在眼前，你得手了！
                     </p>
@@ -1124,21 +1021,15 @@
                         <strong>請到簽到處出示這個畫面領取你的金幣！</strong>
                     </p>
                 </div>
-                <div id="leaderboard-area" class="mt-6 text-white">
-                    <!-- 排行榜將在此處載入 -->
-                    <div class="text-center text-gray-500">載入今日排行榜中...</div>
-                </div>
             `;
-            
-            // 顯示使用者 ID 供工作人員查詢
-            controlsDiv.innerHTML = `<p class="text-sm text-gray-700 mt-4 text-center">你的使用者 ID (供查詢): <span class="font-mono text-xs break-all">${userId}</span></p>`;
-            
-            // *** 儲存分數並顯示排名 ***
-            saveScore();
+            controlsDiv.innerHTML = '';
         }
 
-        /** 階段 4b: 遲來成功畫面 (時間歸零後才完成) */
-        function goToLateSuccess() {
+        /**
+         * 階段 4b: 遲來成功畫面 (時間歸零後才完成)
+         * 新增：Firebase 紀錄與排名顯示
+         */
+        async function goToLateSuccess(isLate) {
             currentState = GAME_STATE.SUCCESS; // 仍視為成功狀態
 
             // 停止 BGM 並播放遲來音效
@@ -1149,7 +1040,19 @@
             timerDisplay.classList.add('hidden'); 
             clearScreen();
             window.scrollTo(0, 0);
+
+            // 顯示載入中
+            contentDiv.innerHTML = `
+                <div class="text-center py-10">
+                    <h2 class="text-3xl font-bold text-yellow-400 mb-4">正在計算您的排名...</h2>
+                    <p class="text-lg text-gray-400">正在等待伺服器確認您的通關紀錄。</p>
+                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-yellow-500 mx-auto mt-6"></div>
+                </div>
+            `;
             
+            // --- Firebase 紀錄與排名計算 ---
+            const { rank, totalRecords } = await recordCompletionAndShowRank(isLate);
+
             document.body.className = 'min-h-screen flex items-center justify-center p-4 success-bg';
             container.className = 'bg-yellow-100 text-gray-900 p-6 md:p-10 rounded-xl shadow-2xl max-w-lg w-full transition-all duration-500 border-4 border-yellow-700';
             
@@ -1158,6 +1061,24 @@
                     <h2 class="text-4xl md:text-5xl font-extrabold text-yellow-700 mt-4 animate-bounce">
                         你成功打開金庫！
                     </h2>
+                    <!-- 顯示代號與時間 -->
+                    <p class="text-xl font-bold mb-2">
+                        代號: <span class="text-red-600">${playerName}</span>
+                    </p>
+                    <p class="text-2xl font-extrabold mb-4 text-red-700">
+                        耗時: ${completionTime} 秒
+                    </p>
+                    <!-- 顯示排名 -->
+                    <p class="text-lg font-semibold mb-6 p-2 bg-yellow-200 rounded-lg shadow-md">
+                        ⏱️ 今日第 <span class="text-red-700 font-extrabold">${rank}</span> 位通關玩家! (共 ${totalRecords} 筆紀錄)
+                    </p>
+                    
+                    <!-- 圖片佔位符：金幣 B 圖 (已移除圓角和邊框，寬度 w-1/2 for mobile) -->
+                    <img src="LATE_IMAGE.png" 
+                         onerror="this.onerror=null; this.src='https://placehold.co/200x150/FFD700/000?text=金幣B圖';"
+                         alt="金幣B圖" 
+                         class="mx-auto w-1/2 max-w-sm object-contain mb-4 shadow-lg"
+                    >
                     <p class="mt-6 text-xl">
                         但是沒想到你來的太晚了，只剩下⋯⋯
                     </p>
@@ -1165,17 +1086,8 @@
                         <strong>請到簽到處出示這個畫面領取你的獎勵！</strong>
                     </p>
                 </div>
-                <div id="leaderboard-area" class="mt-6 text-white">
-                    <!-- 排行榜將在此處載入 -->
-                    <div class="text-center text-gray-500">載入今日排行榜中...</div>
-                </div>
             `;
-            
-            // 顯示使用者 ID 供工作人員查詢
-            controlsDiv.innerHTML = `<p class="text-sm text-gray-700 mt-4 text-center">你的使用者 ID (供查詢): <span class="font-mono text-xs break-all">${userId}</span></p>`;
-            
-            // *** 儲存分數並顯示排名 ***
-            saveScore();
+            controlsDiv.innerHTML = '';
         }
 
 
@@ -1204,25 +1116,10 @@
             renderButton("重新開始", goToInitialImageScreen); // 重新回到封面頁
         }
 
-        // --- 啟動遊戲：等待 Firebase 初始化完成 ---
-        async function mainGameLoad() {
-            console.log("Starting Firebase initialization...");
-            // 顯示載入畫面
-            loadingScreen.style.display = 'flex'; 
-            await initializeFirebase(); // 等待 Firebase 初始化完成
-            
-            // 檢查是否成功初始化 (如果失敗，showFatalError 已經被呼叫，會顯示錯誤方塊)
-            if (!isFirebaseInitialized) {
-                console.log("Firebase failed to initialize. Halting game start.");
-                return;
-            }
-
-            console.log("Firebase ready. Starting game flow.");
-            goToInitialImageScreen(); // 啟動遊戲流程
-        }
-
-        window.onload = mainGameLoad;
-
+        // --- 啟動遊戲 ---
+        // window.onload 現已由 onAuthStateChanged 處理
+        // 如果瀏覽器支持，會在 <script type="module"> 中調用 initGame
+        
     </script>
 </body>
 </html>
