@@ -264,6 +264,8 @@
             const dailyScoresCollectionPath = `artifacts/${appId}/public/data/daily_scores`;
             const scoresRef = collection(db, dailyScoresCollectionPath);
             
+            console.log(`[SaveScore] Attempting to save score for user: ${userId}, Date: ${todayDate}, Time: ${completionTime}s`);
+            
             try {
                 // 1. 檢查是否已經有今日紀錄 (使用 userId 和 date 查詢)
                 const q = query(scoresRef, 
@@ -283,11 +285,11 @@
                             completionTime: completionTime,
                             timestamp: serverTimestamp(),
                         }, { merge: true });
-                        console.log("Updated high score for today.");
+                        console.log("[SaveScore] Updated high score for today.");
                     } else {
                         // 3. 如果舊紀錄更快，則使用舊紀錄的時間來排名
                         completionTime = existingTime;
-                        console.log("Existing score is faster. Skip update, use existing time for ranking.");
+                        console.log("[SaveScore] Existing score is faster or equal. Skip update, use existing time for ranking.");
                     }
                 } else {
                     // 4. 否則新增一筆新的紀錄
@@ -299,15 +301,15 @@
                         date: todayDate,
                         bossId: selectedBossId 
                     };
-                    await addDoc(scoresRef, newDoc);
-                    console.log("New score added successfully.");
+                    const docRef = await addDoc(scoresRef, newDoc);
+                    console.log("[SaveScore] New score added successfully. Doc ID:", docRef.id);
                 }
 
                 // 儲存後立即獲取並顯示排名 (使用 onSnapshot 實現即時更新)
                 fetchAndDisplayRankings();
 
             } catch (error) {
-                console.error("Failed to save or check score:", error);
+                console.error("[SaveScore] Failed to save or check score:", error);
                 showMessage("分數儲存失敗，請截圖後聯繫工作人員！", true);
             }
         }
@@ -324,13 +326,17 @@
             const scoresRef = collection(db, dailyScoresCollectionPath);
             
             const leaderboardDiv = document.getElementById('leaderboard-area');
-            if (!leaderboardDiv) return;
+            if (!leaderboardDiv) {
+                console.error("Leaderboard area element not found.");
+                return;
+            }
             
             // 設置 onSnapshot 監聽器以獲取今日排行榜
             const q = query(scoresRef, where("date", "==", todayDate));
             
             // onSnapshot 會在資料有變動時自動執行
             const unsubscribe = onSnapshot(q, (snapshot) => {
+                console.log(`[Leaderboard] Received snapshot with ${snapshot.size} scores for ${todayDate}.`);
                 let allScores = [];
                 snapshot.forEach((doc) => {
                     allScores.push({ id: doc.id, ...doc.data() });
@@ -342,14 +348,18 @@
                 
                 // 3. 確定玩家的排名
                 let playerRank = -1;
+                // 使用通關時計算的 completionTime 作為預設，或者等待 onSnapshot 更新
                 let playerBestTime = completionTime; 
                 let playerEntry = allScores.find(score => score.userId === userId);
                 
                 if (playerEntry) {
+                    // 如果在排行榜中找到玩家紀錄，以資料庫中的時間為準 (因為可能是更新後的最佳時間)
                     playerBestTime = playerEntry.completionTime;
                     playerRank = allScores.findIndex(score => score.userId === userId) + 1;
+                    console.log(`[Leaderboard] Player Rank: ${playerRank}, Best Time: ${playerBestTime}s`);
                 } else {
-                    // 理論上 saveScore 執行後一定會有紀錄，除非網路延遲
+                    console.log("[Leaderboard] Player entry not found in the current snapshot.");
+                    // 如果紀錄尚未載入，則使用當前通關時間，但排名暫時未知
                     playerRank = -1; 
                 }
                 
@@ -377,9 +387,12 @@
                     const isHighlighted = isPlayer || (score.completionTime === playerBestTime && rank === playerRank);
                     const rankClass = rank === 1 ? 'text-amber-500 text-lg font-bold' : (isHighlighted ? 'text-green-400 font-bold' : 'text-gray-200');
                     
+                    // 確保 playerName 存在，否則使用 User ID
+                    const displayPlayerName = score.playerName || `匿名特務 (${score.userId.substring(0, 4)}...)`;
+
                     rankingHTML += `
                         <li class="flex justify-between items-center p-2 rounded-md ${isHighlighted ? 'bg-green-900 border border-green-500' : 'bg-gray-700'}">
-                            <span class="${rankClass}">#${rank} ${score.playerName}</span>
+                            <span class="${rankClass}">#${rank} ${displayPlayerName}</span>
                             <span class="text-yellow-300">${score.completionTime} 秒</span>
                         </li>
                     `;
@@ -396,12 +409,10 @@
                 
                 leaderboardDiv.innerHTML = rankingHTML;
                 
-                // 為了避免記憶體洩漏，當遊戲重啟時，應該取消這個監聽。
-                // 這裡暫時不做取消，因為 onSnapshot 會在頁面關閉時自動停止。
-
             }, (error) => {
-                console.error("Error fetching daily scores:", error);
-                leaderboardDiv.innerHTML = `<div class="text-red-400 p-4 bg-gray-700 rounded-lg">載入排行榜失敗，請檢查網路連線。</div>`;
+                // *** 新增的錯誤處理 ***
+                console.error("[Leaderboard] Error fetching daily scores with onSnapshot:", error);
+                leaderboardDiv.innerHTML = `<div class="text-red-400 p-4 bg-gray-700 rounded-lg">載入排行榜失敗：${error.code || '未知錯誤'}。請檢查網路連線或權限設定。</div>`;
             });
         }
 
