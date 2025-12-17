@@ -73,6 +73,14 @@
             opacity: 0;
             transition: opacity 0.2s;
         }
+        /* 排行榜表格樣式 */
+        .leaderboard-table {
+            border-collapse: separate;
+            border-spacing: 0 5px; /* 增加行間距 */
+        }
+        .leaderboard-table td {
+            padding: 8px;
+        }
     </style>
     
     <!-- 引入 Firebase SDK -->
@@ -409,11 +417,11 @@
         async function recordCompletionAndShowRank(isLate) {
             if (!db || !currentUserId) {
                 console.error("無法寫入紀錄：Firebase 或 User ID 尚未準備好。");
-                return { rank: 'N/A', totalRecords: 'N/A' };
+                return { entryRank: 'N/A', totalRecords: 'N/A', topTenRanks: [] };
             }
 
             const ranksRef = getPublicRanksCollectionRef();
-            if (!ranksRef) return { rank: 'N/A', totalRecords: 'N/A' };
+            if (!ranksRef) return { entryRank: 'N/A', totalRecords: 'N/A', topTenRanks: [] };
 
             const newRecord = {
                 name: playerName,
@@ -431,44 +439,102 @@
                 console.log("Record added with ID:", docRef.id);
             } catch (e) {
                 console.error("Error adding document:", e);
-                return { rank: 'Error', totalRecords: 'Error' };
+                return { entryRank: 'Error', totalRecords: 'Error', topTenRanks: [] };
             }
 
-            // 2. 獲取當天的所有紀錄並排序
-            
             // 獲取當天零點的時間戳 (用於每日重設篩選)
             const todayStart = new Date();
             todayStart.setHours(0, 0, 0, 0); 
             const todayTimestamp = fs.Timestamp.fromDate(todayStart);
 
-            // 查詢當天所有紀錄，按時間升序排列
-            const q = fs.query(
+            // 2. 查詢 1: 計算玩家的通關順序 (Entry Rank)
+            const q_entry = fs.query(
                 ranksRef,
                 fs.where("timestamp", ">=", todayTimestamp), 
                 fs.orderBy("timestamp", "asc")
             );
+            let entryRank = 'N/A';
+            let totalRecords = 0;
 
             try {
-                const querySnapshot = await fs.getDocs(q);
-                let rank = 'N/A';
-                const totalRecords = querySnapshot.docs.length;
-
-                // 3. 計算排名
-                querySnapshot.docs.forEach((doc, index) => {
-                    // 檢查 userId 是否匹配，或者檢查文檔ID是否匹配
+                const entrySnapshot = await fs.getDocs(q_entry);
+                totalRecords = entrySnapshot.docs.length;
+                entrySnapshot.docs.forEach((doc, index) => {
                     if (doc.id === docRef.id) {
-                        rank = index + 1;
+                        entryRank = index + 1;
                     }
                 });
-                
-                return { rank: rank, totalRecords: totalRecords };
-
             } catch (e) {
-                console.error("Error fetching documents:", e);
-                return { rank: 'Error', totalRecords: 'Error' };
+                console.error("Error fetching entry rank:", e);
             }
+            
+            // 3. 查詢 2: 獲取 Top 10 排行榜 (按 completionTime 排序)
+            const q_leaderboard = fs.query(
+                ranksRef,
+                fs.where("timestamp", ">=", todayTimestamp), 
+                fs.orderBy("completionTime", "asc"), // 按通關時間排序
+                fs.limit(10) // 限制前 10 名
+            );
+
+            let topTenRanks = [];
+
+            try {
+                const leaderboardSnapshot = await fs.getDocs(q_leaderboard);
+                leaderboardSnapshot.docs.forEach((doc, index) => {
+                    const data = doc.data();
+                    // 格式化時間為 MM:SS
+                    const minutes = Math.floor(data.completionTime / 60);
+                    const seconds = data.completionTime % 60;
+                    const timeFormatted = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+                    
+                    topTenRanks.push({
+                        rank: index + 1,
+                        name: data.name,
+                        time: timeFormatted,
+                        isPlayer: data.userId === currentUserId // 標記當前玩家
+                    });
+                });
+            } catch (e) {
+                console.error("Error fetching leaderboard:", e);
+            }
+
+            return { 
+                rank: entryRank, // 這裡的 rank 仍是 entry rank
+                totalRecords: totalRecords, 
+                topTenRanks: topTenRanks 
+            };
         }
 
+        // Helper function to render the leaderboard table
+        function renderLeaderboard(ranks, playerId) {
+            let tableRows = ranks.map(rank => `
+                <tr class="${rank.isPlayer ? 'bg-yellow-400 text-gray-900 font-extrabold shadow-md' : 'bg-gray-700 text-gray-200'} transition hover:bg-yellow-200">
+                    <td class="p-2 text-center rounded-l-lg">${rank.rank}</td>
+                    <td class="p-2 font-semibold">${rank.name}</td>
+                    <td class="p-2 text-right rounded-r-lg font-mono">${rank.time}</td>
+                </tr>
+            `).join('');
+
+            return `
+                <div class="mt-8 pt-4 border-t border-yellow-600">
+                    <h3 class="text-2xl font-bold text-yellow-500 mb-4 text-center">今日最速黑幫 (Top 10)</h3>
+                    <div class="w-full max-w-sm mx-auto">
+                        <table class="leaderboard-table w-full text-sm">
+                            <thead>
+                                <tr class="text-gray-400 bg-gray-800">
+                                    <th class="p-1 w-1/6 text-center">排名</th>
+                                    <th class="p-1 w-3/6 text-left">化名</th>
+                                    <th class="p-1 w-2/6 text-right">耗時 (MM:SS)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${tableRows.length > 0 ? tableRows : '<tr><td colspan="3" class="text-center p-4 text-gray-500">目前沒有紀錄。</td></tr>'}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        }
 
         // --- 流程控制函數 ---
 
@@ -991,7 +1057,7 @@
             `;
 
             // --- Firebase 紀錄與排名計算 ---
-            const { rank, totalRecords } = await recordCompletionAndShowRank(isLate);
+            const { rank, totalRecords, topTenRanks } = await recordCompletionAndShowRank(isLate);
 
             document.body.className = 'min-h-screen flex items-center justify-center p-4 success-bg';
             container.className = 'bg-yellow-100 text-gray-900 p-6 md:p-10 rounded-xl shadow-2xl max-w-lg w-full transition-all duration-500 border-4 border-yellow-700';
@@ -1026,6 +1092,9 @@
                     <p class="mt-4 text-2xl font-bold p-3 bg-yellow-300 rounded-lg">
                         <strong>請到簽到處出示這個畫面領取你的金幣！</strong>
                     </p>
+                    
+                    <!-- 排行榜顯示區 -->
+                    ${renderLeaderboard(topTenRanks)}
                 </div>
             `;
             controlsDiv.innerHTML = '';
@@ -1057,7 +1126,7 @@
             `;
             
             // --- Firebase 紀錄與排名計算 ---
-            const { rank, totalRecords } = await recordCompletionAndShowRank(isLate);
+            const { rank, totalRecords, topTenRanks } = await recordCompletionAndShowRank(isLate);
 
             document.body.className = 'min-h-screen flex items-center justify-center p-4 success-bg';
             container.className = 'bg-yellow-100 text-gray-900 p-6 md:p-10 rounded-xl shadow-2xl max-w-lg w-full transition-all duration-500 border-4 border-yellow-700';
@@ -1091,6 +1160,8 @@
                     <p class="mt-4 text-2xl font-bold p-3 bg-yellow-300 rounded-lg">
                         <strong>請到簽到處出示這個畫面領取你的獎勵！</strong>
                     </p>
+                    <!-- 排行榜顯示區 -->
+                    ${renderLeaderboard(topTenRanks)}
                 </div>
             `;
             controlsDiv.innerHTML = '';
