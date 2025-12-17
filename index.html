@@ -648,6 +648,7 @@
             
             // 只有當 Auth Ready 且選完老大後才能進入下一步
             confirmButton.onclick = () => {
+                 // 修正點：在點擊時，如果 Firebase 未準備好，提示用戶，否則進入下一步
                  if (isAuthReady && currentUserId) {
                     goToNameInput();
                  } else {
@@ -695,11 +696,17 @@
                     }
                 });
 
-                // 啟用按鈕 (如果 Auth 已準備好)
+                // 修正點：選擇老大後，立即檢查 Auth 狀態並嘗試啟用按鈕
                 if (isAuthReady) {
                     confirmButton.disabled = false;
                     confirmButton.classList.remove('bg-gray-500', 'cursor-not-allowed');
                     confirmButton.classList.add('bg-yellow-500', 'hover:bg-yellow-600');
+                } else {
+                    // 如果認證未完成，保持禁用，並提示用戶
+                    confirmButton.disabled = true;
+                    confirmButton.classList.add('bg-gray-500', 'cursor-not-allowed');
+                    confirmButton.classList.remove('bg-yellow-500', 'hover:bg-yellow-600');
+                    showMessage("伺服器連線中，請稍候。", false); // 提示用戶等待連線
                 }
             }
         }
@@ -855,7 +862,7 @@
                 let hintMessage = "這個不是我們要找的。再靠近金庫一點，附近有沒有比較特別的東西？";
                 
                 if (input.includes("規則") || input.includes("守則")) {
-                    hintMessage = "很接近了！不是一般的規則，是跟『金庫』有關的規定，試試看完整的名稱！";
+                    hintMessage = "很接近了！不是一般的規則，是跟『金庫』』有關的規定，試試看完整的名稱！";
                 }
                 
                 showMessage(hintMessage, true);
