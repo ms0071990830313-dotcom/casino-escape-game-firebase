@@ -111,18 +111,16 @@
         // 設置日誌級別，幫助調試
         setLogLevel('error');
         
-        // --- 3. 監聽認證狀態並準備初始化遊戲 (不在此處直接呼叫 initGame) ---
+        // --- 3. 監聽認證狀態並準備初始化遊戲 ---
         onAuthStateChanged(window.auth, (user) => {
             if (user) {
                 window.currentUserId = user.uid;
                 console.log("Firebase: 匿名登入成功. User ID:", user.uid);
             } else {
-                window.currentUserId = null; // 確保失敗時為 null
+                window.currentUserId = null; 
                 console.log("Firebase: 認證失敗或等待中.");
             }
             window.isAuthReady = true;
-            
-            // 如果 initGame 已經在 window.onload 中觸發，這裡無需再次呼叫
         });
         
         // 將必要的 Firebase 函數暴露給主腳本
@@ -180,8 +178,7 @@
         let db = null;
         let auth = null;
         let APP_ID = null;
-        let currentUserId = null;
-        let isAuthReady = false;
+        let fs = null;
         
         // --- 遊戲狀態管理 ---
         const GAME_STATE = {
@@ -212,7 +209,7 @@
         // 密碼提示相關
         let hintsRevealed = 0; 
         
-        // *** DOM 元素宣告 (修復點：確保它們有預設值，且在 initGame 中獲取) ***
+        // *** DOM 元素宣告 ***
         let container, contentDiv, controlsDiv, messageArea, timerDisplay, bgm, successSound, lateSound;
 
         // *** 對話內容 (由老大敘事) ***
@@ -234,12 +231,8 @@
             }
         ];
 
-        // --- Firebase 函式庫參考 ---
-        let fs = null;
-
         // --- 遊戲初始化入口 ---
         function initGame() {
-            // *** 修正點 1: 在函數內部獲取 DOM 元素，確保它們已定義 ***
             container = document.getElementById('game-container');
             contentDiv = document.getElementById('game-content');
             controlsDiv = document.getElementById('game-controls');
@@ -254,13 +247,10 @@
             auth = window.auth;
             APP_ID = window.APP_ID;
             fs = window.fs;
-            currentUserId = window.currentUserId;
-            isAuthReady = window.isAuthReady;
 
             // 確保 Firebase 變數已成功初始化
             if (!db || !auth || !APP_ID || !fs) {
                 console.error("Firebase SDK 載入失敗或初始化未完成.");
-                // 如果 Firebase 初始化失敗，仍允許遊戲啟動，但不執行紀錄功能
                 goToInitialImageScreen();
                 return;
             }
@@ -367,7 +357,7 @@
             controlsDiv.appendChild(constContainer);
         }
         function revealHint() {
-            if (hintsRevealed >= 3) { // 假設 HINTS 陣列長度為 3
+            if (hintsRevealed >= 3) {
                 showMessage("已經沒有更多提示了！", true);
                 return;
             }
@@ -382,7 +372,6 @@
                 updateTimer();
             }
             
-            // 這裡原本應該從 HINTS 陣列取值，若無陣列則使用靜態字串
             const HINTS = [
                 "提示 1: 看看守則第一條，標題的顏色是否藏著數字？",
                 "提示 2: 守則提到方向：上、下、左、右，分別對應刻度位置。",
@@ -422,7 +411,9 @@
 
         /** 寫入通關紀錄並獲取排名 */
         async function recordCompletionAndShowRank(isLate) {
-            if (!db || !currentUserId) {
+            // 重要修正：必須直接從 window.currentUserId 獲取，因為異步登入後，window 的值會更新
+            const uid = window.currentUserId;
+            if (!db || !uid) {
                 console.error("無法寫入紀錄：Firebase 或 User ID 尚未準備好。");
                 return { rank: 'N/A', totalRecords: 'N/A', topTenRanks: [] };
             }
@@ -432,9 +423,9 @@
 
             const newRecord = {
                 name: playerName,
-                userId: currentUserId,
+                userId: uid,
                 completionTime: completionTime,
-                timestamp: fs.serverTimestamp(), // 使用伺服器時間確保排序精確
+                timestamp: fs.serverTimestamp(), 
                 isLate: isLate,
                 bossId: selectedBossId
             };
@@ -449,67 +440,53 @@
                 return { rank: 'Error', totalRecords: 'Error', topTenRanks: [] };
             }
 
-            // 獲取當天零點的時間戳 (用於每日重設篩選)
-            const todayStart = new Date();
-            todayStart.setHours(0, 0, 0, 0); 
-            const todayTimestamp = fs.Timestamp.fromDate(todayStart);
-
-            // 2. 查詢 1: 計算玩家的通關順序 (Entry Rank)
-            const q_entry = fs.query(
-                ranksRef,
-                fs.where("timestamp", ">=", todayTimestamp), 
-                fs.orderBy("timestamp", "asc")
-            );
-            let entryRank = 'N/A';
-            let totalRecords = 0;
-
+            // 2. 獲取數據並在內存中處理 (遵循 Rule 2，避免複合查詢索引問題)
             try {
-                const entrySnapshot = await fs.getDocs(q_entry);
-                totalRecords = entrySnapshot.docs.length;
-                entrySnapshot.docs.forEach((doc, index) => {
-                    if (doc.id === docRef.id) {
-                        entryRank = index + 1;
-                    }
+                // 獲取當天零點的時間戳
+                const todayStart = new Date();
+                todayStart.setHours(0, 0, 0, 0); 
+                const todayTimestamp = fs.Timestamp.fromDate(todayStart);
+
+                // 只執行基礎查詢
+                const q = fs.query(ranksRef);
+                const querySnapshot = await fs.getDocs(q);
+                
+                // 在內存中過濾今日數據
+                const allTodayDocs = querySnapshot.docs
+                    .map(d => ({ id: d.id, ...d.data() }))
+                    .filter(d => d.timestamp && d.timestamp.toDate() >= todayStart);
+
+                // 計算玩家的通關順序 (按 timestamp 排序)
+                const sortedByEntry = [...allTodayDocs].sort((a, b) => {
+                    const timeA = a.timestamp ? a.timestamp.seconds : 0;
+                    const timeB = b.timestamp ? b.timestamp.seconds : 0;
+                    return timeA - timeB;
                 });
-            } catch (e) {
-                console.error("Error fetching entry rank:", e);
-            }
-            
-            // 3. 查詢 2: 獲取 Top 10 排行榜 (按 completionTime 排序)
-            const q_leaderboard = fs.query(
-                ranksRef,
-                fs.where("timestamp", ">=", todayTimestamp), 
-                fs.orderBy("completionTime", "asc"), // 按通關時間排序
-                fs.limit(10) // 限制前 10 名
-            );
+                
+                const rank = sortedByEntry.findIndex(d => d.id === docRef.id) + 1;
+                const totalRecords = allTodayDocs.length;
 
-            let topTenRanks = [];
-
-            try {
-                const leaderboardSnapshot = await fs.getDocs(q_leaderboard);
-                leaderboardSnapshot.docs.forEach((doc, index) => {
-                    const data = doc.data();
-                    // 格式化時間為 MM:SS
-                    const minutes = Math.floor(data.completionTime / 60);
-                    const seconds = data.completionTime % 60;
-                    const timeFormatted = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-                    
-                    topTenRanks.push({
-                        rank: index + 1,
-                        name: data.name,
-                        time: timeFormatted,
-                        isPlayer: data.userId === currentUserId // 標記當前玩家
+                // 獲取 Top 10 排行榜 (按 completionTime 排序)
+                const topTenRanks = [...allTodayDocs]
+                    .sort((a, b) => a.completionTime - b.completionTime)
+                    .slice(0, 10)
+                    .map((data, index) => {
+                        const minutes = Math.floor(data.completionTime / 60);
+                        const seconds = data.completionTime % 60;
+                        return {
+                            rank: index + 1,
+                            name: data.name,
+                            time: `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`,
+                            isPlayer: data.userId === uid
+                        };
                     });
-                });
-            } catch (e) {
-                console.error("Error fetching leaderboard:", e);
-            }
 
-            return { 
-                rank: entryRank, 
-                totalRecords: totalRecords, 
-                topTenRanks: topTenRanks 
-            };
+                return { rank, totalRecords, topTenRanks };
+
+            } catch (e) {
+                console.error("Error processing ranks:", e);
+                return { rank: 'Error', totalRecords: 'Error', topTenRanks: [] };
+            }
         }
 
         // Helper function to render the leaderboard table
@@ -572,7 +549,7 @@
                     wrapper.id = 'dialogue-wrapper';
                     contentDiv.appendChild(wrapper);
                 }
-                wrapper.className = 'fade-transition space-y-4'; // 重設 className 以觸發淡入
+                wrapper.className = 'fade-transition space-y-4'; 
                 
                 // 決定說話者樣式
                 const speakerClass = step.speaker === 'BOSS' ? 'text-yellow-400 font-bold' : 'text-green-400 font-bold';
@@ -590,7 +567,6 @@
                 // 3. 渲染按鈕
                 const buttonAction = () => {
                     if (step.action === 'START_MISSION') {
-                        // 記錄任務開始的精確時間
                         missionStartTime = Date.now(); 
                         startTimer(); 
                         goToVaultLocate(); 
@@ -617,10 +593,7 @@
 
             contentDiv.innerHTML = `
                 <div class="text-center space-y-6">
-                    <!-- 移除冗餘的 H2 標題 -->
                     <p class="text-lg text-gray-300">一場秘密行動即將展開...</p>
-                    
-                    <!-- 初始圖片：cover.jpg -->
                     <img src="cover.jpg" 
                          onerror="this.onerror=null; this.src='https://placehold.co/400x200/29294F/FFF?text=起始畫面圖片';"
                          alt="起始畫面圖片" 
@@ -629,7 +602,6 @@
                 </div>
             `;
             
-            // --- 勾選框區域 ---
             const checkboxArea = document.createElement('div');
             checkboxArea.className = 'mt-6 space-y-3 text-left text-gray-200';
             checkboxArea.innerHTML = `
@@ -644,15 +616,13 @@
             `;
             controlsDiv.appendChild(checkboxArea);
 
-            // --- 按鈕 ---
             const initialButton = document.createElement('button');
             initialButton.id = 'initial-start-button';
             initialButton.textContent = "進入秘密任務";
-            initialButton.disabled = true; // 預設禁用
+            initialButton.disabled = true; 
             initialButton.className = 'gold-button bg-gray-500 cursor-not-allowed text-white px-6 py-3 rounded-lg w-full mt-6 transition-all duration-200';
             controlsDiv.appendChild(initialButton);
 
-            // --- 檢查函數 ---
             function checkPreconditions() {
                 const networkChecked = document.getElementById('check-network').checked;
                 const volumeChecked = document.getElementById('check-volume').checked;
@@ -670,22 +640,13 @@
                 }
             }
 
-            // --- 監聽勾選框 ---
             document.getElementById('check-network').addEventListener('change', checkPreconditions);
             document.getElementById('check-volume').addEventListener('change', checkPreconditions);
 
-            // --- 處理按鈕點擊 (即使被禁用也需要檢查) ---
             initialButton.onclick = () => {
                 if (!initialButton.disabled) {
-                    // 執行 Firebase 匿名登入
-                    // 只有在 Firebase 載入成功且未登入時才執行登入 (避免重複登入)
                     if (window.auth && !window.auth.currentUser) {
-                        fs.signInAnonymously(auth).then(() => {
-                            console.log("Anonymous sign-in triggered.");
-                        }).catch(error => {
-                            console.error("Anonymous sign-in failed:", error);
-                            showMessage("連線至伺服器失敗，請檢查網路。", true);
-                        });
+                        fs.signInAnonymously(auth).catch(error => console.error(error));
                     }
                     goToBossSelection();
                 } else {
@@ -694,12 +655,10 @@
             };
         }
 
-        /** 新增：老大選擇頁面 */
         function goToBossSelection() {
-            // ... (老大選擇頁面邏輯不變)
             clearScreen();
             window.scrollTo(0, 0);
-            selectedBossId = null; // 重置選擇
+            selectedBossId = null;
 
             document.body.className = 'min-h-screen flex items-center justify-center p-4';
             container.className = 'bg-gray-800 text-white p-6 md:p-10 rounded-xl shadow-2xl max-w-lg w-full transition-all duration-500';
@@ -707,21 +666,16 @@
             contentDiv.innerHTML = `
                 <h2 class="text-2xl font-bold text-yellow-400 text-center mb-4">你的老大是？</h2>
                 <p class="text-sm text-gray-400 text-center mb-6">*人物不影響故事進行</p>
-                
-                <div id="boss-grid" class="grid grid-cols-3 gap-2">
-                    <!-- 老大圖片將在此處動態生成 -->
-                </div>
+                <div id="boss-grid" class="grid grid-cols-3 gap-2"></div>
             `;
             
             const confirmButton = document.createElement('button');
             confirmButton.id = 'confirm-boss-button';
             confirmButton.textContent = "我的老大是他/她"; 
-            confirmButton.disabled = true; // 預設禁用
+            confirmButton.disabled = true; 
             confirmButton.className = 'gold-button bg-gray-500 cursor-not-allowed text-white px-6 py-3 rounded-lg w-full mt-6 transition-all duration-200';
             
-            // 只有當 Auth Ready 且選完老大後才能進入下一步
             confirmButton.onclick = () => {
-                 // 修正點：在點擊時，如果 Firebase 未準備好，提示用戶，否則進入下一步
                  if (window.isAuthReady && window.currentUserId) {
                     goToNameInput();
                  } else {
@@ -730,8 +684,6 @@
             };
             controlsDiv.appendChild(confirmButton);
 
-
-            // --- 圖片渲染和選擇邏輯 ---
             const bosses = [1, 2, 3, 4, 5, 6, 7, 8, 9];
             const gridDiv = document.getElementById('boss-grid');
 
@@ -740,17 +692,9 @@
                 item.className = 'boss-item relative cursor-pointer border-4 border-transparent rounded-lg overflow-hidden transition-all duration-200 hover:border-yellow-500';
                 item.setAttribute('data-boss-id', id);
                 item.onclick = () => selectBoss(id);
-
-                // 請確保您已上傳 boss_1.png 到 boss_9.png
                 item.innerHTML = `
-                    <img src="boss_${id}.png" 
-                         onerror="this.onerror=null; this.src='https://placehold.co/100x100/3A3A3A/FFF?text=Boss%20${id}';"
-                         alt="老大 ${id}" 
-                         class="w-full h-full object-cover rounded-md"
-                    >
-                    <div id="check-${id}" class="boss-check absolute inset-0 bg-black/50 flex items-center justify-center text-4xl text-yellow-400">
-                        ✓
-                    </div>
+                    <img src="boss_${id}.png" onerror="this.onerror=null; this.src='https://placehold.co/100x100/3A3A3A/FFF?text=Boss%20${id}';" class="w-full h-full object-cover rounded-md">
+                    <div id="check-${id}" class="boss-check absolute inset-0 bg-black/50 flex items-center justify-center text-4xl text-yellow-400">✓</div>
                 `;
                 gridDiv.appendChild(item);
             });
@@ -769,290 +713,178 @@
                     }
                 });
 
-                // 修正點：選擇老大後，立即檢查 Auth 狀態並嘗試啟用按鈕
                 if (window.isAuthReady) {
                     confirmButton.disabled = false;
                     confirmButton.classList.remove('bg-gray-500', 'cursor-not-allowed');
                     confirmButton.classList.add('bg-yellow-500', 'hover:bg-yellow-600');
                 } else {
-                    // 如果認證未完成，保持禁用，並提示用戶
                     confirmButton.disabled = true;
                     confirmButton.classList.add('bg-gray-500', 'cursor-not-allowed');
                     confirmButton.classList.remove('bg-yellow-500', 'hover:bg-yellow-600');
-                    showMessage("伺服器連線中，請稍候。", false); // 提示用戶等待連線
+                    showMessage("伺服器連線中，請稍候。", false);
                 }
             }
         }
 
-        /** 新增：名稱輸入頁面 */
         function goToNameInput() {
             clearScreen();
             window.scrollTo(0, 0);
-            
-            // 設置容器樣式
-            document.body.className = 'min-h-screen flex items-center justify-center p-4';
-            container.className = 'bg-gray-800 text-white p-6 md:p-10 rounded-xl shadow-2xl max-w-lg w-full transition-all duration-500';
-
             contentDiv.innerHTML = `
                 <h2 class="text-2xl font-bold text-yellow-400 text-center mb-6">告訴老大你的代號</h2>
                 <p class="text-md text-gray-400 text-center">這是你獨一無二的身份，將用於紀錄你的通關順序。</p>
             `;
-
-            // 定義提交名稱的函數
             const submitName = (name) => {
                 const trimmedName = name.trim();
                 if (trimmedName.length >= 2 && trimmedName.length <= 10) {
                     playerName = trimmedName;
                     showMessage(`代號：${playerName}，確認！`, false);
-                    setTimeout(goToMissionDialogue, 1500); // 進入新的對話場景
+                    setTimeout(goToMissionDialogue, 1500); 
                 } else {
                     showMessage("代號長度需在 2 到 10 個字元之間。", true);
                 }
             };
-
-            // 渲染輸入框和按鈕
-            renderInput("請輸入你的黑幫化名（2-10個字）", "確認代號", submitName, 'codename-input', 10); // <-- 已修改輸入框提示文字
+            renderInput("請輸入你的黑幫化名（2-10個字）", "確認代號", submitName, 'codename-input', 10);
             document.getElementById('codename-input').focus();
         }
 
-        /** 新增：對話場景入口 */
         function goToMissionDialogue() {
             currentState = GAME_STATE.START;
             clearScreen();
             stopTimer();
             hintsRevealed = 0;
             timerDisplay.classList.add('hidden'); 
-            
-            // BGM 在這裡啟動
             startBGM(); 
-            
-            document.body.className = 'min-h-screen flex items-center justify-center p-4';
-            container.className = 'bg-gray-800 text-white p-6 md:p-10 rounded-xl shadow-2xl max-w-lg w-full transition-all duration-500';
-
-            // 顯示老大圖片
             contentDiv.innerHTML = `
                 <div class="text-center mb-6">
-                    <img src="boss_${selectedBossId}.png" 
-                         onerror="this.onerror=null; this.src='https://placehold.co/120x120/3A3A3A/FFF?text=BOSS';"
-                         alt="選定的老大" 
-                         class="mx-auto w-32 h-32 object-cover rounded-full shadow-lg border-4 border-red-500"
-                    >
+                    <img src="boss_${selectedBossId}.png" onerror="this.onerror=null; this.src='https://placehold.co/120x120/3A3A3A/FFF?text=BOSS';" class="mx-auto w-32 h-32 object-cover rounded-full shadow-lg border-4 border-red-500">
                 </div>
-                <div id="dialogue-content-area" class="space-y-4">
-                    <!-- 對話內容將在此處顯示 -->
-                </div>
+                <div id="dialogue-content-area" class="space-y-4"></div>
             `;
-            
-            // 準備對話內容的包裹器
             const dialogueArea = document.getElementById('dialogue-content-area');
             const wrapper = document.createElement('div');
             wrapper.id = 'dialogue-wrapper';
             wrapper.className = 'fade-transition space-y-4';
             dialogueArea.appendChild(wrapper);
-
-            currentDialogueStep = 0; // 重置對話步驟
-            displayNextDialogue(); // 開始顯示第一段對話
+            currentDialogueStep = 0;
+            displayNextDialogue();
         }
 
-        /** 階段 1: 確認密碼位數 */
         function goToVaultLocate() {
             currentState = GAME_STATE.VAULT_LOCATE;
             clearScreen();
-            window.scrollTo(0, 0); // 自動捲動到最上面
-
+            window.scrollTo(0, 0);
             contentDiv.innerHTML = `
                 <p>你現在已經成功潛入賭場放<span class="text-yellow-500 font-bold">金庫</span>的地方！趕快找找金庫在哪裡？</p>
                 <hr class="my-4 border-gray-600">
                 <p class="text-yellow-400"><strong>【行動指示：第一步】</strong></p>
                 <p>仔細觀察現實世界中的金庫寶箱，<strong>密碼鎖是幾位數？</strong></p>
             `;
-
             renderInput("請輸入密碼鎖的位數 (數字)", "確認位數", checkVaultDigits, 'digit-input', 1);
             document.getElementById('digit-input').type = 'number';
         }
 
-        /** 檢查密碼位數是否正確 (3) */
         function checkVaultDigits(input) {
             const digitInput = parseInt(input.trim());
-            
             if (digitInput === 3) {
                 showMessage("數字正確！你發現了金庫密碼是三位數密碼鎖。", false);
-                setTimeout(() => {
-                    window.scrollTo(0, 0); 
-                    goToClueHunt();
-                }, 2500);
+                setTimeout(() => { window.scrollTo(0, 0); goToClueHunt(); }, 2500);
                 return;
             }
-
-            // 提供引導提示
             let hintMessage = "這個位數不正確。";
-            if (isNaN(digitInput) || digitInput === 0) {
-                hintMessage = "請輸入一個數字。你需要找到金庫寶箱，上面應該有密碼鎖。";
-            } else if (digitInput > 4) {
-                hintMessage = `這個數字太大了。再仔細看看，這個鎖的結構似乎很簡單，只靠幾個轉盤運作。`;
-            } else if (digitInput === 2) {
-                 hintMessage = `只有兩位數嗎？請再靠近一點數數看，密碼轉盤是不是有三個？`;
-            } else if (digitInput === 4) {
-                 hintMessage = `不對，它不是四位數的。仔細數數，密碼鎖只有三個可以轉動的盤。`;
-            } else {
-                hintMessage = "這個位數不正確。請再次確認金庫寶箱上密碼鎖的數字轉盤數量。";
-            }
-            
+            if (isNaN(digitInput) || digitInput === 0) hintMessage = "請輸入一個數字。";
+            else if (digitInput > 4) hintMessage = "這個數字太大了。";
+            else if (digitInput === 2) hintMessage = "只有兩位數嗎？請再靠近一點數數看。";
+            else if (digitInput === 4) hintMessage = "不對，它不是四位數的。";
             showMessage(hintMessage, true);
         }
 
-        /** 階段 2: 尋找線索 (找金庫守則) */
         function goToClueHunt() {
             currentState = GAME_STATE.CLUE_HUNT;
             clearScreen();
-            window.scrollTo(0, 0); // 自動捲動到最上面
-            // Timer is already running
-
+            window.scrollTo(0, 0);
             contentDiv.innerHTML = `
                 <p>你確認了，金庫鎖需要<strong>三位數密碼</strong>才能打開。同時，你發現<strong>金庫上有一個提示</strong>寫著什麼⋯⋯。</p>
-                <p>金庫密碼每天都會換，但你事前已經調查過，賭場主人記性很差，<strong>相關的提示一定就在金庫附近</strong>。</p>
+                <p>金庫密碼每天都會換，但你事前已經調查過，相關提示一定就在金庫附近。</p>
                 <hr class="my-4 border-gray-600">
                 <p class="text-yellow-400"><strong>【行動指示：第二步】</strong></p>
                 <p>環顧四周，尋找周邊物品，什麼東西看起來像是在提供密碼的線索？</p>
             `;
-
             renderInput("請輸入你發現的線索名稱 (例如：紙條、便籤)", "確認線索", checkClue, 'clue-input');
         }
 
-        /** 檢查線索是否正確 */
         function checkClue(input) {
             const normalizedInput = input.trim().replace(/\s/g, '').toLowerCase();
-            
             if (normalizedInput === CORRECT_CLUE.toLowerCase()) {
                 showMessage("線索確認！這就是我們要找的！", false);
-                setTimeout(() => {
-                    window.scrollTo(0, 0); // 自動捲動到最上面
-                    goToCodeEntry();
-                }, 1500);
+                setTimeout(() => { window.scrollTo(0, 0); goToCodeEntry(); }, 1500);
             } else {
-                let hintMessage = "這個不是我們要找的。再靠近金庫一點，附近有沒有比較特別的東西？";
-                
-                if (input.includes("規則") || input.includes("守則")) {
-                    hintMessage = "很接近了！不是一般的規則，是跟『金庫』』有關的規定，試試看完整的名稱！";
-                }
-                
+                let hintMessage = "這個不是我們要找的。";
+                if (input.includes("規則") || input.includes("守則")) hintMessage = "很接近了！試試看完整的名稱！";
                 showMessage(hintMessage, true);
             }
         }
 
-        /** 階段 3: 輸入密碼 */
         function goToCodeEntry() {
             currentState = GAME_STATE.CODE_ENTRY;
             clearScreen();
-            window.scrollTo(0, 0); // 自動捲動到最上面
-
+            window.scrollTo(0, 0);
             contentDiv.innerHTML = `
                 <p>很好，你已經掌握了關鍵線索：<strong>【金庫守則】</strong>。</p>
-                <p>結合你剛才在金庫鎖上發現的提示，現在是時候破解三位數密碼了！</p>
+                <p>結合提示，現在是時候破解三位數密碼了！</p>
                 <hr class="my-4 border-gray-600">
                 <p class="text-yellow-400"><strong>【行動指示：第三步】</strong></p>
                 <p>根據守則內容和提示，推算出三位密碼。金庫裡的金幣等你！</p>
             `;
-
-            // --- 提示系統區塊 ---
             const hintSection = document.createElement('div');
             hintSection.className = 'mt-6 p-4 bg-gray-700 rounded-lg shadow-inner';
             hintSection.innerHTML = `
-                <h3 class="text-xl font-bold text-red-400 mb-2 flex items-center">
-                    <span class="text-3xl mr-2">💡</span>
-                    <span>3個提示</span>
-                </h3>
+                <h3 class="text-xl font-bold text-red-400 mb-2 flex items-center"><span class="text-3xl mr-2">💡</span><span>3個提示</span></h3>
                 <p class="text-sm text-red-300 mb-3">時間歸零仍可打開金庫，但是可能會發生⋯⋯</p>
-                <div id="hint-messages" class="space-y-2">
-                    <!-- 提示訊息將在此處動態顯示 -->
-                </div>
+                <div id="hint-messages" class="space-y-2"></div>
             `;
-            
             const hintButton = document.createElement('button');
             hintButton.id = 'reveal-hint-button';
             hintButton.textContent = "每個提示扣除 60秒"; 
             hintButton.className = 'gold-button bg-red-500 hover:bg-red-600 text-white px-6 py-3 rounded-lg w-full mt-4';
             hintButton.onclick = revealHint;
-            
             hintSection.appendChild(hintButton);
             controlsDiv.appendChild(hintSection);
             
-            // --- 密碼輸入區塊 ---
             const inputContainer = document.createElement('div');
             inputContainer.className = 'mt-6 pt-6 border-t border-gray-600';
-
             const input = document.createElement('input');
             input.id = 'code-input';
             input.type = 'number';
             input.maxLength = 3;
             input.placeholder = "每輸錯一次扣除30秒";
             input.className = 'p-3 rounded-lg bg-gray-700 text-white border-2 border-yellow-500 focus:outline-none focus:border-yellow-400 w-full';
-            
             const button = document.createElement('button');
             button.textContent = "解鎖金庫！";
             button.className = 'gold-button bg-yellow-500 hover:bg-yellow-600 text-gray-900 px-6 py-3 rounded-lg w-full mt-3';
             button.onclick = () => checkCode(document.getElementById('code-input').value);
-
-            input.addEventListener('keyup', (event) => {
-                if (event.key === 'Enter') {
-                    checkCode(document.getElementById('code-input').value);
-                }
-            });
-
             inputContainer.appendChild(input);
             inputContainer.appendChild(button);
             controlsDiv.appendChild(inputContainer);
         }
 
-        /** 檢查密碼是否正確 */
         function checkCode(input) {
             const normalizedInput = input.trim();
-            
             if (normalizedInput === CORRECT_CODE) {
                 showMessage("密碼正確！金庫鎖正在解開...", false);
-                
-                // 計算通關時間 (秒)
                 completionTime = Math.floor((Date.now() - missionStartTime) / 1000); 
-
-                if (timeLeft <= 0) {
-                    setTimeout(() => goToLateSuccess(true), 2000); // 傳遞 isLate=true
-                } else {
-                    setTimeout(() => goToSuccess(false), 2000); // 傳遞 isLate=false
-                }
+                if (timeLeft <= 0) setTimeout(() => goToLateSuccess(true), 2000);
+                else setTimeout(() => goToSuccess(false), 2000);
             } else {
-                // *** 密碼錯誤時扣除 30 秒 ***
-                const timeDeduction = 30;
-                
-                if (timeLeft - timeDeduction <= 0) {
-                    timeLeft = 0; 
-                    stopTimer(); // 確保計時器已停止
-                    showMessage(`密碼錯誤！鎖定機制正在啟動... 時間已用盡！`, true);
-                    updateTimer();
-                } else {
-                    timeLeft -= timeDeduction;
-                    showMessage(`密碼錯誤！鎖定機制正在啟動... 小心謹慎！不然警報就要響了！`, true);
-                    updateTimer(); // 更新計時器顯示
-                }
+                timeLeft = Math.max(0, timeLeft - 30);
+                if (timeLeft <= 0) { stopTimer(); showMessage(`時間已用盡！`, true); updateTimer(); }
+                else { showMessage(`密碼錯誤！扣除30秒`, true); updateTimer(); }
             }
         }
 
-        /**
-         * 階段 4a: 正常成功畫面 (時間內完成)
-         * 新增：Firebase 紀錄與排名顯示
-         */
         async function goToSuccess(isLate) {
             currentState = GAME_STATE.SUCCESS;
-            
-            // 停止 BGM 並播放成功音效
-            bgm.pause();
-            successSound.play().catch(error => console.log("Success sound playback failed:", error));
-
-            stopTimer();
-            timerDisplay.classList.add('hidden');
-            clearScreen();
-            window.scrollTo(0, 0);
-
-            // 顯示載入中
+            bgm.pause(); successSound.play().catch(error => console.log(error));
+            stopTimer(); timerDisplay.classList.add('hidden'); clearScreen(); window.scrollTo(0, 0);
             contentDiv.innerHTML = `
                 <div class="text-center py-10">
                     <h2 class="text-3xl font-bold text-yellow-400 mb-4">正在計算您的排名...</h2>
@@ -1060,67 +892,28 @@
                     <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-yellow-500 mx-auto mt-6"></div>
                 </div>
             `;
-
-            // --- Firebase 紀錄與排名計算 ---
             const { rank, totalRecords, topTenRanks } = await recordCompletionAndShowRank(isLate);
-
             document.body.className = 'min-h-screen flex items-center justify-center p-4 success-bg';
             container.className = 'bg-yellow-100 text-gray-900 p-6 md:p-10 rounded-xl shadow-2xl max-w-lg w-full transition-all duration-500 border-4 border-yellow-700';
-            
             contentDiv.innerHTML = `
                 <div class="text-center">
-                    <h2 class="text-4xl md:text-5xl font-extrabold text-yellow-700 mt-4 animate-bounce">
-                        你成功打開金庫！
-                    </h2>
-                    <!-- 顯示代號與時間 -->
-                    <p class="text-xl font-bold mb-2">
-                        代號: <span class="text-red-600">${playerName}</span>
-                    </p>
-                    <p class="text-2xl font-extrabold mb-4 text-red-700">
-                        耗時: ${completionTime} 秒
-                    </p>
-                    <!-- 顯示排名 -->
-                    <p class="text-lg font-semibold mb-6 p-2 bg-yellow-200 rounded-lg shadow-md">
-                        🎉 今日第 <span class="text-red-700 font-extrabold">${rank}</span> 位通關玩家! (共 ${totalRecords} 筆紀錄)
-                    </p>
-
-                    <!-- 圖片佔位符：金幣成功圖 -->
-                    <img src="SUCCESS_IMAGE.png" 
-                         onerror="this.onerror=null; this.src='https://placehold.co/200x150/FFD700/000?text=金幣成功圖';"
-                         alt="金幣成功圖" 
-                         class="mx-auto w-1/2 max-w-sm object-contain mb-4 shadow-lg"
-                    >
-                    
-                    <p class="mt-6 text-xl">
-                        金山銀山就在眼前，你得手了！
-                    </p>
-                    <p class="mt-4 text-2xl font-bold p-3 bg-yellow-300 rounded-lg">
-                        <strong>請到簽到處出示這個畫面領取你的金幣！</strong>
-                    </p>
-                    <!-- 排行榜顯示區 -->
+                    <h2 class="text-4xl md:text-5xl font-extrabold text-yellow-700 mt-4 animate-bounce">你成功打開金庫！</h2>
+                    <p class="text-xl font-bold mb-2">代號: <span class="text-red-600">${playerName}</span></p>
+                    <p class="text-2xl font-extrabold mb-4 text-red-700">耗時: ${completionTime} 秒</p>
+                    <p class="text-lg font-semibold mb-6 p-2 bg-yellow-200 rounded-lg shadow-md">🎉 今日第 <span class="text-red-700 font-extrabold">${rank}</span> 位通關玩家! (共 ${totalRecords} 筆紀錄)</p>
+                    <img src="SUCCESS_IMAGE.png" onerror="this.onerror=null; this.src='https://placehold.co/200x150/FFD700/000?text=金幣成功圖';" alt="金幣成功圖" class="mx-auto w-1/2 max-w-sm object-contain mb-4 shadow-lg">
+                    <p class="mt-6 text-xl">金山銀山就在眼前，你得手了！</p>
+                    <p class="mt-4 text-2xl font-bold p-3 bg-yellow-300 rounded-lg"><strong>請到簽到處出示這個畫面領取你的金幣！</strong></p>
                     ${renderLeaderboard(topTenRanks)}
                 </div>
             `;
             controlsDiv.innerHTML = '';
         }
 
-        /**
-         * 階段 4b: 遲來成功畫面 (時間歸零後才完成)
-         * 新增：Firebase 紀錄與排名顯示
-         */
         async function goToLateSuccess(isLate) {
-            currentState = GAME_STATE.SUCCESS; // 仍視為成功狀態
-
-            // 停止 BGM 並播放遲來音效
-            bgm.pause();
-            lateSound.play().catch(error => console.log("Late sound playback failed:", error));
-            
-            stopTimer();
-            timerDisplay.classList.add('hidden'); 
-            clearScreen();
-            window.scrollTo(0, 0);
-
-            // 顯示載入中
+            currentState = GAME_STATE.SUCCESS; 
+            bgm.pause(); lateSound.play().catch(error => console.log(error));
+            stopTimer(); timerDisplay.classList.add('hidden'); clearScreen(); window.scrollTo(0, 0);
             contentDiv.innerHTML = `
                 <div class="text-center py-10">
                     <h2 class="text-3xl font-bold text-yellow-400 mb-4">正在計算您的排名...</h2>
@@ -1128,76 +921,38 @@
                     <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-yellow-500 mx-auto mt-6"></div>
                 </div>
             `;
-            
-            // --- Firebase 紀錄與排名計算 ---
             const { rank, totalRecords, topTenRanks } = await recordCompletionAndShowRank(isLate);
-
             document.body.className = 'min-h-screen flex items-center justify-center p-4 success-bg';
             container.className = 'bg-yellow-100 text-gray-900 p-6 md:p-10 rounded-xl shadow-2xl max-w-lg w-full transition-all duration-500 border-4 border-yellow-700';
-            
             contentDiv.innerHTML = `
                 <div class="text-center">
-                    <h2 class="text-4xl md:text-5xl font-extrabold text-yellow-700 mt-4 animate-bounce">
-                        你成功打開金庫！
-                    </h2>
-                    <!-- 顯示代號與時間 -->
-                    <p class="text-xl font-bold mb-2">
-                        代號: <span class="text-red-600">${playerName}</span>
-                    </p>
-                    <p class="text-2xl font-extrabold mb-4 text-red-700">
-                        耗時: ${completionTime} 秒
-                    </p>
-                    <!-- 顯示排名 -->
-                    <p class="text-lg font-semibold mb-6 p-2 bg-yellow-200 rounded-lg shadow-md">
-                        ⏱️ 今日第 <span class="text-red-700 font-extrabold">${rank}</span> 位通關玩家! (共 ${totalRecords} 筆紀錄)
-                    </p>
-                    
-                    <!-- 圖片佔位符：金幣 B 圖 (已移除圓角和邊框，寬度 w-1/2 for mobile) -->
-                    <img src="LATE_IMAGE.png" 
-                         onerror="this.onerror=null; this.src='https://placehold.co/200x150/FFD700/000?text=金幣B圖';"
-                         alt="金幣B圖" 
-                         class="mx-auto w-1/2 max-w-sm object-contain mb-4 shadow-lg"
-                    >
-                    <p class="mt-6 text-xl">
-                        但是沒想到你來的太晚了，只剩下⋯⋯
-                    </p>
-                    <p class="mt-4 text-2xl font-bold p-3 bg-yellow-300 rounded-lg">
-                        <strong>請到簽到處出示這個畫面領取你的獎勵！</strong>
-                    </p>
-                    <!-- 排行榜顯示區 -->
+                    <h2 class="text-4xl md:text-5xl font-extrabold text-yellow-700 mt-4 animate-bounce">你成功打開金庫！</h2>
+                    <p class="text-xl font-bold mb-2">代號: <span class="text-red-600">${playerName}</span></p>
+                    <p class="text-2xl font-extrabold mb-4 text-red-700">耗時: ${completionTime} 秒</p>
+                    <p class="text-lg font-semibold mb-6 p-2 bg-yellow-200 rounded-lg shadow-md">⏱️ 今日第 <span class="text-red-700 font-extrabold">${rank}</span> 位通關玩家! (共 ${totalRecords} 筆紀錄)</p>
+                    <img src="LATE_IMAGE.png" onerror="this.onerror=null; this.src='https://placehold.co/200x150/FFD700/000?text=金幣B圖';" alt="金幣B圖" class="mx-auto w-1/2 max-w-sm object-contain mb-4 shadow-lg">
+                    <p class="mt-6 text-xl">但是沒想到你來的太晚了，只剩下⋯⋯</p>
+                    <p class="mt-4 text-2xl font-bold p-3 bg-yellow-300 rounded-lg"><strong>請到簽到處出示這個畫面領取你的獎勵！</strong></p>
                     ${renderLeaderboard(topTenRanks)}
                 </div>
             `;
             controlsDiv.innerHTML = '';
         }
 
-
-        /** 階段 5: 失敗畫面 */
         function gameOver() {
             currentState = GAME_STATE.FAIL;
-            clearScreen();
-            stopTimer();
-            window.scrollTo(0, 0); // 自動捲動到最上面
-            
+            clearScreen(); stopTimer(); window.scrollTo(0, 0);
             container.className = 'bg-red-900 text-white p-6 md:p-10 rounded-xl shadow-2xl max-w-lg w-full transition-all duration-500 border-4 border-red-700';
-            
             contentDiv.innerHTML = `
                 <div class="text-center">
-                    <h2 class="text-4xl md:text-5xl font-extrabold text-red-400 mt-4">
-                        行動失敗！
-                    </h2>
-                    <p class="mt-6 text-xl">
-                        換班的保鏢已經到達，你被抓個正著。金幣夢碎！
-                    </p>
-                    <p class="mt-4">
-                        下次準備更充分再來吧。
-                    </p>
+                    <h2 class="text-4xl md:text-5xl font-extrabold text-red-400 mt-4">行動失敗！</h2>
+                    <p class="mt-6 text-xl">換班的保鏢已經到達，你被抓個正著。金幣夢碎！</p>
+                    <p class="mt-4">下次準備更充分再來吧。</p>
                 </div>
             `;
-            renderButton("重新開始", goToInitialImageScreen); // 重新回到封面頁
+            renderButton("重新開始", goToInitialImageScreen); 
         }
 
-        // --- 啟動遊戲 ---
         window.onload = initGame;
         
     </script>
