@@ -116,7 +116,7 @@
         // 設置日誌級別，幫助調試
         setLogLevel('error');
         
-        // --- 3. 監聽認證狀態並準備初始化遊戲 (不在此處直接呼叫 initGame) ---
+        // --- 3. 監聽認證狀態並準備初始化遊戲 ---
         onAuthStateChanged(window.auth, (user) => {
             if (user) {
                 window.currentUserId = user.uid;
@@ -213,7 +213,7 @@
 
         // 密碼提示相關
         let hintsRevealed = 0; 
-        let currentDialogueStep = 0; 
+        let currentDialogueStep = 0; // 新增：宣告漏掉的變數
         
         // *** DOM 元素宣告 ***
         let container, contentDiv, controlsDiv, messageArea, timerDisplay, bgm, successSound, lateSound;
@@ -266,7 +266,7 @@
             if (bgm && bgm.paused) {
                 bgm.volume = 0.5;
                 bgm.play().catch(error => {
-                    console.log("BGM 自動播放失敗，可能是瀏覽器限制。", error);
+                    console.log("BGM 自動播放失敗。", error);
                 });
             }
         }
@@ -276,22 +276,14 @@
             return `${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`;
         }
         function updateTimer() {
-            if (timeLeft < 0) {
-                timeLeft = 0;
-            }
+            if (timeLeft < 0) timeLeft = 0;
             timerDisplay.textContent = `剩餘時間: ${formatTime(timeLeft)}`;
 
-            if (timeLeft <= 120 && timeLeft > 0) {
-                timerDisplay.classList.add('timer-large');
-            } else {
-                timerDisplay.classList.remove('timer-large');
-            }
+            if (timeLeft <= 120 && timeLeft > 0) timerDisplay.classList.add('timer-large');
+            else timerDisplay.classList.remove('timer-large');
 
-            if (timeLeft <= 60 && timeLeft > 0) {
-                timerDisplay.classList.add('timer-warning');
-            } else {
-                timerDisplay.classList.remove('timer-warning');
-            }
+            if (timeLeft <= 60 && timeLeft > 0) timerDisplay.classList.add('timer-warning');
+            else timerDisplay.classList.remove('timer-warning');
 
             if (timeLeft <= 0) {
                 stopTimer();
@@ -307,19 +299,12 @@
             updateTimer(); 
             timerInterval = setInterval(updateTimer, 1000);
         }
-        function stopTimer() {
-            if (timerInterval) {
-                clearInterval(timerInterval);
-                timerInterval = null;
-            }
-        }
+        function stopTimer() { if (timerInterval) { clearInterval(timerInterval); timerInterval = null; } }
         function showMessage(text, isError = false) {
             messageArea.textContent = text;
             messageArea.className = `mt-4 p-3 rounded-lg text-center font-bold ${isError ? 'bg-red-700' : 'bg-green-700'}`;
             messageArea.classList.remove('hidden');
-            setTimeout(() => {
-                messageArea.classList.add('hidden');
-            }, 3500);
+            setTimeout(() => { messageArea.classList.add('hidden'); }, 3500);
         }
         function clearScreen() {
             contentDiv.innerHTML = '';
@@ -329,11 +314,12 @@
             const button = document.createElement('button');
             button.textContent = text;
             button.className = 'gold-button bg-yellow-500 hover:bg-yellow-600 text-gray-900 px-6 py-3 rounded-lg w-full';
-            button.onclick = onClick;
+            button.onclick = (e) => onClick(e);
             if (id) button.id = id;
             controlsDiv.appendChild(button);
             return button;
         }
+
         function renderInput(placeholder, buttonText, onSubmit, inputId, maxLength) {
             const constContainer = document.createElement('div');
             constContainer.className = 'flex flex-col space-y-3';
@@ -360,6 +346,7 @@
             constContainer.appendChild(button);
             controlsDiv.appendChild(constContainer);
         }
+
         function revealHint() {
             const HINTS = [
                 "提示 1: 看看守則第一條，標題的顏色是否藏著數字？",
@@ -385,7 +372,7 @@
             const hintDiv = document.getElementById('hint-messages');
             
             const p = document.createElement('p');
-            p.className = "mt-2 p-3 bg-gray-700 rounded-lg border border-red-500 transition-all duration-300 transform scale-100 hover:scale-[1.02]";
+            p.className = "mt-2 p-3 bg-gray-700 rounded-lg border border-red-500 transition-all duration-300 transform scale-100 hover:scale-[1.02] text-sm";
             p.innerHTML = `<span class="text-red-400 font-bold">[提示 #${hintsRevealed + 1} (-60秒)]</span>: ${hintText}`;
             hintDiv.appendChild(p);
             hintsRevealed++;
@@ -394,14 +381,11 @@
             if (hintsRevealed >= HINTS.length) {
                 hintButton.textContent = "已無更多提示";
                 hintButton.disabled = true;
-                hintButton.classList.remove('bg-red-500', 'hover:bg-red-600');
                 hintButton.classList.add('bg-gray-500', 'cursor-not-allowed');
-            } else {
-                hintButton.textContent = "每個提示扣除 60秒"; 
             }
         }
 
-        // --- 核心邏輯：紀錄通關時間與排名計算 ---
+        // --- 核心邏輯：紀錄與排名計算 ---
 
         function getPublicRanksCollectionRef() {
             if (!db || !APP_ID) return null;
@@ -455,8 +439,8 @@
                 const rank = sortedByEntry.findIndex(d => d.id === docRef.id) + 1;
                 const totalRecords = allTodayDocs.length;
 
-                // --- 成功獲獎排名 (過濾掉 > 600秒的人，然後看剩下的人排第幾個提交) ---
-                const qualifiers = sortedByEntry.filter(d => d.completionTime <= INITIAL_TIME_SECONDS);
+                // --- 修正後的大獎名額排名：僅計算耗時 < 600 秒的合格者 ---
+                const qualifiers = sortedByEntry.filter(d => d.completionTime < INITIAL_TIME_SECONDS);
                 const successRank = qualifiers.findIndex(d => d.id === docRef.id) + 1;
 
                 // 獲取 Top 10 排行榜 (按 completionTime 排序)
@@ -538,7 +522,7 @@
                     wrapper.id = 'dialogue-wrapper';
                     contentDiv.appendChild(wrapper);
                 }
-                wrapper.className = 'fade-transition space-y-4'; 
+                wrapper.className = 'fade-transition space-y-4 fade-in'; 
                 
                 const speakerClass = step.speaker === 'BOSS' ? 'text-yellow-400 font-bold' : 'text-green-400 font-bold';
                 const speakerName = step.speaker === 'PLAYER' ? playerName : '老大';
@@ -838,8 +822,8 @@
                 showMessage("線索確認！這就是我們要找的！", false);
                 setTimeout(() => { window.scrollTo(0, 0); goToCodeEntry(); }, 1500);
             } else {
-                let hintMessage = "這個不是我們要找的。再靠近金庫一點，附近有沒有比較特別的東西？";
-                if (input.includes("規則") || input.includes("守則")) hintMessage = "很接近了！不是一般的規則，是跟『金庫』』有關的規定，試試看完整的名稱！";
+                let hintMessage = "這個不是我們要找的。";
+                if (input.includes("規則") || input.includes("守則")) hintMessage = "很接近了！試試看完整的名稱！";
                 showMessage(hintMessage, true);
             }
         }
@@ -912,98 +896,68 @@
 
             const { rank, successRank, totalRecords, topTenRanks } = await recordCompletionAndShowRank();
             
-            // --- 大獎判定：準時完成 (<=600s) 且 在今日合格者中排名前 50 位 ---
-            const isGrandSuccess = (completionTime <= INITIAL_TIME_SECONDS) && (successRank > 0 && successRank <= 50);
+            // --- 修正後的大獎判定邏輯 ---
+            // 條件：通關時間嚴格小於 600 秒 且 在準時合格者中排名前 50 位
+            const isGrandSuccess = (completionTime < INITIAL_TIME_SECONDS) && (successRank > 0 && successRank <= 50);
+
+            document.body.className = 'min-h-screen flex items-center justify-center p-4 success-bg';
+            container.className = 'bg-yellow-100 text-gray-900 p-6 md:p-10 rounded-xl shadow-2xl max-w-lg w-full transition-all duration-500 border-4 border-yellow-700';
 
             if (isGrandSuccess) {
                 successSound.play().catch(e => console.log(e));
-                goToSuccess(rank, successRank, totalRecords, topTenRanks);
+                contentDiv.innerHTML = `
+                    <div class="text-center">
+                        <h2 class="text-4xl md:text-5xl font-extrabold text-yellow-700 mt-4 animate-bounce">
+                            你成功打開金庫！
+                        </h2>
+                        <p class="text-xl font-bold mb-2">
+                            代號: <span class="text-red-600">${playerName}</span>
+                        </p>
+                        <p class="text-2xl font-extrabold mb-4 text-red-700">
+                            耗時: ${completionTime} 秒
+                        </p>
+                        <div class="bg-yellow-200 p-2 rounded shadow-md mb-6">
+                            <p class="text-lg font-semibold">🎉 今日第 <span class="text-red-700 font-extrabold">${rank}</span> 位通關玩家! (共 ${totalRecords} 筆紀錄)</p>
+                            <p class="text-xs text-green-700 mt-1 font-bold">限量大獎合格順位：第 ${successRank} 名</p>
+                        </div>
+                        <img src="SUCCESS_IMAGE.png" onerror="this.src='https://placehold.co/200x150/FFD700/000?text=SUCCESS';" alt="金幣成功圖" class="mx-auto w-1/2 max-w-sm object-contain mb-4 shadow-lg">
+                        <p class="mt-6 text-xl">
+                            金山銀山就在眼前，你得手了！
+                        </p>
+                        <p class="mt-4 text-2xl font-bold p-3 bg-yellow-300 rounded-lg">
+                            <strong>請到簽到處出示這個畫面領取你的金幣！</strong>
+                        </p>
+                        ${renderLeaderboard(topTenRanks)}
+                    </div>
+                `;
             } else {
                 lateSound.play().catch(e => console.log(e));
-                goToLateSuccess(rank, successRank, totalRecords, topTenRanks);
+                contentDiv.innerHTML = `
+                    <div class="text-center">
+                        <h2 class="text-4xl md:text-5xl font-extrabold text-yellow-700 mt-4 animate-bounce">
+                            你成功打開金庫！
+                        </h2>
+                        <p class="text-xl font-bold mb-2">
+                            代號: <span class="text-red-600">${playerName}</span>
+                        </p>
+                        <p class="text-2xl font-extrabold mb-4 text-red-700">
+                            耗時: ${completionTime} 秒
+                        </p>
+                        <div class="bg-yellow-200 p-2 rounded shadow-md mb-6">
+                            <p class="text-lg font-semibold">⏱️ 今日第 <span class="text-red-700 font-extrabold">${rank}</span> 位通關玩家! (共 ${totalRecords} 筆紀錄)</p>
+                            ${successRank > 0 ? `<p class="text-xs text-orange-700 mt-1 font-bold">準時合格順位：第 ${successRank} 名</p>` : '<p class="text-xs text-red-600 mt-1 font-bold">任務逾時 (超過600秒)</p>'}
+                        </div>
+                        <img src="LATE_IMAGE.png" onerror="this.src='https://placehold.co/200x150/FFD700/000?text=LATE';" alt="金幣B圖" class="mx-auto w-1/2 max-w-sm object-contain mb-4 shadow-lg">
+                        <p class="mt-6 text-xl">
+                            但是沒想到你來的太晚了，只剩下⋯⋯
+                        </p>
+                        <p class="mt-4 text-2xl font-bold p-3 bg-yellow-300 rounded-lg">
+                            <strong>請到簽到處出示這個畫面領取你的獎勵！</strong>
+                        </p>
+                        ${renderLeaderboard(topTenRanks)}
+                    </div>
+                `;
             }
-        }
-
-        function goToSuccess(rank, successRank, totalRecords, topTenRanks) {
-            document.body.className = 'min-h-screen flex items-center justify-center p-4 success-bg';
-            container.className = 'bg-yellow-100 text-gray-900 p-6 md:p-10 rounded-xl shadow-2xl max-w-lg w-full transition-all duration-500 border-4 border-yellow-700';
-            
-            clearScreen();
-            contentDiv.innerHTML = `
-                <div class="text-center">
-                    <h2 class="text-4xl md:text-5xl font-extrabold text-yellow-700 mt-4 animate-bounce">
-                        你成功打開金庫！
-                    </h2>
-                    <p class="text-xl font-bold mb-2">
-                        代號: <span class="text-red-600">${playerName}</span>
-                    </p>
-                    <p class="text-2xl font-extrabold mb-4 text-red-700">
-                        耗時: ${completionTime} 秒
-                    </p>
-                    <div class="bg-yellow-200 p-2 rounded shadow-md mb-6">
-                        <p class="text-lg font-semibold">🎉 今日第 <span class="text-red-700 font-extrabold">${rank}</span> 位通關玩家! (共 ${totalRecords} 筆紀錄)</p>
-                        <p class="text-xs text-green-700 mt-1 font-bold">限量大獎合格順位：第 ${successRank} 名</p>
-                    </div>
-
-                    <img src="SUCCESS_IMAGE.png" onerror="this.onerror=null; this.src='https://placehold.co/200x150/FFD700/000?text=WIN';" alt="金幣成功圖" class="mx-auto w-1/2 max-w-sm object-contain mb-4 shadow-lg">
-                    
-                    <p class="mt-6 text-xl">
-                        金山銀山就在眼前，你得手了！
-                    </p>
-                    <p class="mt-4 text-2xl font-bold p-3 bg-yellow-300 rounded-lg">
-                        <strong>請到簽到處出示這個畫面領取你的金幣！</strong>
-                    </p>
-                    ${renderLeaderboard(topTenRanks)}
-                </div>
-            `;
-        }
-
-        function goToLateSuccess(rank, successRank, totalRecords, topTenRanks) {
-            document.body.className = 'min-h-screen flex items-center justify-center p-4 success-bg';
-            container.className = 'bg-yellow-100 text-gray-900 p-6 md:p-10 rounded-xl shadow-2xl max-w-lg w-full transition-all duration-500 border-4 border-yellow-700';
-            
-            clearScreen();
-            contentDiv.innerHTML = `
-                <div class="text-center">
-                    <h2 class="text-4xl md:text-5xl font-extrabold text-yellow-700 mt-4 animate-bounce">
-                        你成功打開金庫！
-                    </h2>
-                    <p class="text-xl font-bold mb-2">
-                        代號: <span class="text-red-600">${playerName}</span>
-                    </p>
-                    <p class="text-2xl font-extrabold mb-4 text-red-700">
-                        耗時: ${completionTime} 秒
-                    </p>
-                    <div class="bg-yellow-200 p-2 rounded shadow-md mb-6">
-                        <p class="text-lg font-semibold">⏱️ 今日第 <span class="text-red-700 font-extrabold">${rank}</span> 位通關玩家! (共 ${totalRecords} 筆紀錄)</p>
-                        ${successRank > 0 ? `<p class="text-xs text-orange-700 mt-1 font-bold">準時合格順位：第 ${successRank} 名</p>` : '<p class="text-xs text-red-600 mt-1 font-bold">任務逾時 (超過600秒)</p>'}
-                    </div>
-                    
-                    <img src="LATE_IMAGE.png" onerror="this.onerror=null; this.src='https://placehold.co/200x150/FFD700/000?text=LATE';" alt="金幣B圖" class="mx-auto w-1/2 max-w-sm object-contain mb-4 shadow-lg">
-                    
-                    <p class="mt-6 text-xl">
-                        但是沒想到你來的太晚了，只剩下⋯⋯
-                    </p>
-                    <p class="mt-4 text-2xl font-bold p-3 bg-yellow-300 rounded-lg">
-                        <strong>請到簽到處出示這個畫面領取你的獎勵！</strong>
-                    </p>
-                    ${renderLeaderboard(topTenRanks)}
-                </div>
-            `;
-        }
-
-        function gameOver() {
-            currentState = GAME_STATE.FAIL;
-            clearScreen(); stopTimer(); window.scrollTo(0, 0);
-            container.className = 'bg-red-900 text-white p-6 md:p-10 rounded-xl shadow-2xl max-w-lg w-full transition-all duration-500 border-4 border-red-700';
-            contentDiv.innerHTML = `
-                <div class="text-center">
-                    <h2 class="text-4xl md:text-5xl font-extrabold text-red-400 mt-4">行動失敗！</h2>
-                    <p class="mt-6 text-xl">換班的保鏢已經到達，你被抓個正著。金幣夢碎！</p>
-                    <p class="mt-4">下次準備更充分再來吧。</p>
-                </div>
-            `;
-            renderButton("重新開始", goToInitialImageScreen); 
         }
 
         window.onload = initGame;
