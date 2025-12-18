@@ -21,13 +21,18 @@
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -2px rgba(0, 0, 0, 0.4);
             font-weight: 700;
         }
-        .gold-button:hover {
+        .gold-button:hover:not(:disabled) {
             transform: translateY(-2px);
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -4px rgba(0, 0, 0, 0.4);
         }
-        .gold-button:active {
+        .gold-button:active:not(:disabled) {
             transform: translateY(0);
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
+        }
+        .gold-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            filter: grayscale(0.5);
         }
         /* 成功畫面特效 */
         .success-bg {
@@ -103,27 +108,21 @@
         window.firebaseApp = initializeApp(firebaseConfig);
         window.db = getFirestore(window.firebaseApp);
         window.auth = getAuth(window.firebaseApp);
-        // 設定 App ID 作為資料庫路徑的一部分 (這裡使用 projectId)
         window.APP_ID = firebaseConfig.projectId;
         window.currentUserId = null;
         window.isAuthReady = false;
 
-        // 設置日誌級別，幫助調試
         setLogLevel('error');
         
-        // --- 3. 監聽認證狀態並準備初始化遊戲 ---
+        // --- 3. 監聽認證狀態 ---
         onAuthStateChanged(window.auth, (user) => {
             if (user) {
                 window.currentUserId = user.uid;
                 console.log("Firebase: 匿名登入成功. User ID:", user.uid);
-            } else {
-                window.currentUserId = null; 
-                console.log("Firebase: 認證失敗或等待中.");
             }
             window.isAuthReady = true;
         });
         
-        // 將必要的 Firebase 函數暴露給主腳本
         window.fs = { collection, addDoc, serverTimestamp, query, where, orderBy, getDocs, Timestamp, signInAnonymously };
 
     </script>
@@ -136,102 +135,58 @@
         您的瀏覽器不支持音頻播放。
     </audio>
 
-    <!-- 成功音效 -->
+    <!-- 音效 -->
     <audio id="success-sound">
         <source src="SUCCESS_Sound.mp4" type="audio/mp4">
     </audio>
-    <!-- 遲來成功音效 -->
     <audio id="late-sound">
         <source src="LATE_sound.mp4" type="audio/mp4">
     </audio>
 
     <!-- 主遊戲容器 -->
     <div id="game-container" class="bg-gray-800 text-white p-6 md:p-10 rounded-xl shadow-2xl max-w-lg w-full transition-all duration-500">
-        
-        <!-- 標題 -->
         <h1 class="text-3xl md:text-4xl font-bold text-center mb-6 text-yellow-400 text-shadow-custom">
             黑色追緝令：賭場風雲
         </h1>
-
-        <!-- 計時器顯示區塊 -->
-        <div id="timer-display" class="text-center text-xl font-mono p-2 mb-4 rounded-lg bg-red-800 text-yellow-300 shadow-inner hidden">
-            <!-- 剩餘時間: 10:00 -->
-        </div>
-
-        <!-- 內容區塊 -->
-        <div id="game-content" class="text-lg space-y-4">
-            <!-- 遊戲內容將在此處動態載入 -->
-        </div>
-
-        <!-- 互動區塊 -->
-        <div id="game-controls" class="mt-8 flex flex-col space-y-4">
-            <!-- 按鈕和輸入框將在此處動態載入 -->
-        </div>
-
-        <!-- 訊息區塊 (用於提示錯誤或成功) -->
+        <div id="timer-display" class="text-center text-xl font-mono p-2 mb-4 rounded-lg bg-red-800 text-yellow-300 shadow-inner hidden"></div>
+        <div id="game-content" class="text-lg space-y-4"></div>
+        <div id="game-controls" class="mt-8 flex flex-col space-y-4"></div>
         <div id="message-area" class="mt-4 p-3 rounded-lg text-center font-bold hidden"></div>
-
     </div>
 
     <script type="text/javascript">
-        // --- Firebase 全域變數定義 ---
-        let db = null;
-        let auth = null;
-        let APP_ID = null;
-        let fs = null;
+        // --- 變數定義 ---
+        let db, auth, APP_ID, fs;
         
-        // --- 遊戲狀態管理 ---
-        const GAME_STATE = {
-            START: 0,       // 遊戲開始敘事畫面
-            VAULT_LOCATE: 1, // 確認金庫位數
-            CLUE_HUNT: 2,    // 尋找金庫守則
-            CODE_ENTRY: 3,   // 輸入密碼
-            SUCCESS: 4,      // 成功
-            FAIL: 5          // 失敗
-        };
-
+        const GAME_STATE = { START: 0, VAULT_LOCATE: 1, CLUE_HUNT: 2, CODE_ENTRY: 3, SUCCESS: 4, FAIL: 5 };
         const CORRECT_CLUE = "金庫守則";
         const CORRECT_CODE = "275"; 
-        
-        // 計時器設定 (10 分鐘 = 600 秒)
         const INITIAL_TIME_SECONDS = 600;
+        const HINTS = [
+            "提示 1: 看看守則第一條，標題的顏色是否藏著數字？",
+            "提示 2: 守則提到方向：上、下、左、右，分別對應刻度位置。",
+            "提示 3: 將所有發現的數字，依照守則末尾的字母順序排列。"
+        ];
+
         let timerInterval = null;
         let timeLeft = INITIAL_TIME_SECONDS;
-
         let currentState = GAME_STATE.START;
-        
-        // *** 全域變數：玩家名稱、老大選擇、時間記錄 ***
         let playerName = "";
         let selectedBossId = null; 
-        let missionStartTime = 0; // 任務開始時間 (Date.now())
-        let completionTime = 0;   // 最終通關時間 (秒)
-
-        // 密碼提示相關
+        let missionStartTime = 0; 
+        let completionTime = 0;
         let hintsRevealed = 0; 
         
-        // *** DOM 元素宣告 ***
         let container, contentDiv, controlsDiv, messageArea, timerDisplay, bgm, successSound, lateSound;
 
-        // *** 對話內容 (由老大敘事) ***
-        let currentDialogueStep = 0; 
         const DIALOGUE_STEPS = (name) => [
             { speaker: 'BOSS', text: `<span class="text-red-400">${name}</span>你來啦⋯⋯`, buttonText: "繼續" },
             { speaker: 'PLAYER', text: `老大！有何吩咐？`, buttonText: "繼續" },
             { speaker: 'BOSS', text: `你被邀請到這場由黑幫舉辦的賭場宴會，表面上是來一擲千金的客人，但你真正的目標是賭場後面的那座<span class="text-yellow-500 font-bold">金庫</span>！`, buttonText: "繼續" },
-            { 
-                speaker: 'BOSS', 
-                text: `今天很多其他黑幫成員也是打著跟你一樣的主意，你必須爭分奪秒，盡快把金庫打開，<span class="text-yellow-400 font-bold">不然裡面的金幣會被其他人捷足先登！</span>`, 
-                buttonText: "繼續" 
-            },
-            {
-                speaker: 'BOSS',
-                text: `現在，你趁保鏢在打瞌睡，已經偷偷潛入到了賭場的金庫位置。<br>噓！小心不要被發現！<br><span class="text-yellow-400 font-bold">十分鐘內</span>你必須解出這個謎題，不然換班的人就要來了，你會被抓個正著！<br>仔細查看金庫在哪裡？還有密碼，你需要知道密碼是幾位數.`,
-                buttonText: "偷偷潛入金庫",
-                action: 'START_MISSION'
-            }
+            { speaker: 'BOSS', text: `今天很多其他黑幫成員也是打著跟你一樣的主意，你必須爭分奪秒，盡快把金庫打開，<span class="text-yellow-400 font-bold">不然裡面的金幣會被其他人捷足先登！</span>`, buttonText: "繼續" },
+            { speaker: 'BOSS', text: `現在，你趁保鏢在打瞌睡，已經偷偷潛入到了賭場的金庫位置。<br>噓！小心不要被發現！<br><span class="text-yellow-400 font-bold">十分鐘內</span>你必須解出這個謎題，不然換班的人就要來了，你會被抓個正著！<br>仔細查看金庫在哪裡？還有密碼，你需要知道密碼是幾位數。`, buttonText: "偷偷潛入金庫", action: 'START_MISSION' }
         ];
 
-        // --- 遊戲初始化入口 ---
         function initGame() {
             container = document.getElementById('game-container');
             contentDiv = document.getElementById('game-content');
@@ -241,55 +196,28 @@
             bgm = document.getElementById('bgm');
             successSound = document.getElementById('success-sound');
             lateSound = document.getElementById('late-sound');
-            
-            // 從 Window 範圍獲取 Firebase 實例
-            db = window.db;
-            auth = window.auth;
-            APP_ID = window.APP_ID;
-            fs = window.fs;
-
-            // 確保 Firebase 變數已成功初始化
-            if (!db || !auth || !APP_ID || !fs) {
-                console.error("Firebase SDK 載入失敗或初始化未完成.");
-                goToInitialImageScreen();
-                return;
-            }
-            
+            db = window.db; auth = window.auth; APP_ID = window.APP_ID; fs = window.fs;
             goToInitialImageScreen();
         }
         
-        // --- 音樂/計時器/輔助函數 ---
         function startBGM() {
             if (bgm && bgm.paused) {
                 bgm.volume = 0.5;
-                bgm.play().catch(error => {
-                    console.log("BGM 自動播放失敗。", error);
-                });
+                bgm.play().catch(e => console.log("BGM 被攔截"));
             }
         }
         function formatTime(seconds) {
-            const minutes = Math.floor(seconds / 60);
-            const remainingSeconds = seconds % 60;
-            return `${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`;
+            const m = Math.floor(seconds / 60);
+            const s = seconds % 60;
+            return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
         }
         function updateTimer() {
-            if (timeLeft < 0) {
-                timeLeft = 0;
-            }
+            if (timeLeft < 0) timeLeft = 0;
             timerDisplay.textContent = `剩餘時間: ${formatTime(timeLeft)}`;
-
-            if (timeLeft <= 120 && timeLeft > 0) {
-                timerDisplay.classList.add('timer-large');
-            } else {
-                timerDisplay.classList.remove('timer-large');
-            }
-
-            if (timeLeft <= 60 && timeLeft > 0) {
-                timerDisplay.classList.add('timer-warning');
-            } else {
-                timerDisplay.classList.remove('timer-warning');
-            }
-
+            if (timeLeft <= 120 && timeLeft > 0) timerDisplay.classList.add('timer-large');
+            else timerDisplay.classList.remove('timer-large');
+            if (timeLeft <= 60 && timeLeft > 0) timerDisplay.classList.add('timer-warning');
+            else timerDisplay.classList.remove('timer-warning');
             if (timeLeft <= 0) {
                 stopTimer();
                 timerDisplay.textContent = "時間到！換班保鏢已到，請快速完成密碼輸入。";
@@ -304,116 +232,70 @@
             updateTimer(); 
             timerInterval = setInterval(updateTimer, 1000);
         }
-        function stopTimer() {
-            if (timerInterval) {
-                clearInterval(timerInterval);
-                timerInterval = null;
-            }
-        }
+        function stopTimer() { if (timerInterval) { clearInterval(timerInterval); timerInterval = null; } }
         function showMessage(text, isError = false) {
             messageArea.textContent = text;
             messageArea.className = `mt-4 p-3 rounded-lg text-center font-bold ${isError ? 'bg-red-700' : 'bg-green-700'}`;
             messageArea.classList.remove('hidden');
-            setTimeout(() => {
-                messageArea.classList.add('hidden');
-            }, 3500);
+            setTimeout(() => messageArea.classList.add('hidden'), 3500);
         }
-        function clearScreen() {
-            contentDiv.innerHTML = '';
-            controlsDiv.innerHTML = '';
-        }
-        function renderButton(text, onClick, isFinalStep = false, id = null) {
+        function clearScreen() { contentDiv.innerHTML = ''; controlsDiv.innerHTML = ''; }
+        
+        function renderButton(text, onClick, id = null) {
             const button = document.createElement('button');
             button.textContent = text;
             button.className = 'gold-button bg-yellow-500 hover:bg-yellow-600 text-gray-900 px-6 py-3 rounded-lg w-full';
             button.onclick = onClick;
             if (id) button.id = id;
             controlsDiv.appendChild(button);
+            return button;
         }
+
         function renderInput(placeholder, buttonText, onSubmit, inputId, maxLength) {
-            const constContainer = document.createElement('div');
-            constContainer.className = 'flex flex-col space-y-3';
-            
+            const c = document.createElement('div');
+            c.className = 'flex flex-col space-y-3';
             const input = document.createElement('input');
             input.id = inputId;
             input.type = 'text';
             input.maxLength = maxLength || 50;
             input.placeholder = placeholder;
             input.className = 'p-3 rounded-lg bg-gray-700 text-white border-2 border-yellow-500 focus:outline-none focus:border-yellow-400';
-            
             const button = document.createElement('button');
             button.textContent = buttonText;
             button.className = 'gold-button bg-yellow-500 hover:bg-yellow-600 text-gray-900 px-6 py-3 rounded-lg';
-            button.onclick = () => onSubmit(document.getElementById(inputId).value);
-
-            input.addEventListener('keyup', (event) => {
-                if (event.key === 'Enter') {
-                    onSubmit(document.getElementById(inputId).value);
-                }
-            });
-
-            constContainer.appendChild(input);
-            constContainer.appendChild(button);
-            controlsDiv.appendChild(constContainer);
+            button.onclick = (e) => onSubmit(document.getElementById(inputId).value, e.target);
+            input.addEventListener('keyup', (e) => { if (e.key === 'Enter') onSubmit(input.value, button); });
+            c.appendChild(input);
+            c.appendChild(button);
+            controlsDiv.appendChild(c);
         }
+
         function revealHint() {
-            const HINTS = [
-                "提示 1: 看看守則第一條，標題的顏色是否藏著數字？",
-                "提示 2: 守則提到方向：上、下、左、右，分別對應刻度位置。",
-                "提示 3: 將所有發現的數字，依照守則末尾的字母順序排列。"
-            ];
-            if (hintsRevealed >= HINTS.length) {
-                showMessage("已經沒有更多提示了！", true);
-                return;
-            }
-            const timeDeduction = 60;
-            if (timeLeft - timeDeduction <= 0) {
-                timeLeft = 0; 
-                showMessage("時間用盡！你無法再獲取提示了。", true);
-                updateTimer();
-            } else {
-                timeLeft -= timeDeduction;
-                showMessage(`扣除 ${timeDeduction} 秒。請參考新提示。`, false);
-                updateTimer();
-            }
-            
+            if (hintsRevealed >= HINTS.length) { showMessage("已經沒有更多提示了！", true); return; }
+            const deduction = 60;
+            if (timeLeft - deduction <= 0) { timeLeft = 0; showMessage("時間用盡！", true); updateTimer(); } 
+            else { timeLeft -= deduction; showMessage(`扣除 ${deduction} 秒。`, false); updateTimer(); }
             const hintText = HINTS[hintsRevealed];
-            const hintDiv = document.getElementById('hint-messages');
-            
             const p = document.createElement('p');
-            p.className = "mt-2 p-3 bg-gray-700 rounded-lg border border-red-500 transition-all duration-300 transform scale-100 hover:scale-[1.02]";
-            p.innerHTML = `<span class="text-red-400 font-bold">[提示 #${hintsRevealed + 1} (-60秒)]</span>: ${hintText}`;
-            hintDiv.appendChild(p);
+            p.className = "mt-2 p-3 bg-gray-700 rounded-lg border border-red-500 text-sm";
+            p.innerHTML = `<span class="text-red-400 font-bold">[提示 #${hintsRevealed + 1}]</span>: ${hintText}`;
+            document.getElementById('hint-messages').appendChild(p);
             hintsRevealed++;
-            
-            const hintButton = document.getElementById('reveal-hint-button');
             if (hintsRevealed >= HINTS.length) {
-                hintButton.textContent = "已無更多提示";
-                hintButton.disabled = true;
-                hintButton.classList.remove('bg-red-500', 'hover:bg-red-600');
-                hintButton.classList.add('bg-gray-500', 'cursor-not-allowed');
-            } else {
-                hintButton.textContent = "每個提示扣除 60秒"; 
+                const btn = document.getElementById('reveal-hint-button');
+                btn.textContent = "已無更多提示";
+                btn.disabled = true;
             }
         }
-
-        // --- 核心邏輯：紀錄通關時間與排名計算 ---
 
         function getPublicRanksCollectionRef() {
-            if (!db || !APP_ID) return null;
-            return fs.collection(db, `artifacts/${APP_ID}/public/data/puzzle_ranks`);
+            return fs.collection(db, `artifacts/${window.APP_ID}/public/data/puzzle_ranks`);
         }
 
         async function recordCompletionAndShowRank(isLate) {
             const uid = window.currentUserId;
-            if (!db || !uid) {
-                console.error("無法寫入紀錄：Firebase 或 User ID 尚未準備好。");
-                return { rank: 'N/A', totalRecords: 'N/A', topTenRanks: [] };
-            }
-
+            if (!db || !uid) return { rank: 'N/A', totalRecords: 'N/A', topTenRanks: [] };
             const ranksRef = getPublicRanksCollectionRef();
-            if (!ranksRef) return { rank: 'N/A', totalRecords: 'N/A', topTenRanks: [] };
-
             const newRecord = {
                 name: playerName,
                 userId: uid,
@@ -422,80 +304,44 @@
                 isLate: isLate,
                 bossId: selectedBossId
             };
-            
             let docRef;
+            try { docRef = await fs.addDoc(ranksRef, newRecord); } catch (e) { return { rank: 'Error' }; }
             try {
-                docRef = await fs.addDoc(ranksRef, newRecord);
-            } catch (e) {
-                console.error("Error adding document:", e);
-                return { rank: 'Error', totalRecords: 'Error', topTenRanks: [] };
-            }
-
-            try {
-                const todayStart = new Date();
-                todayStart.setHours(0, 0, 0, 0); 
-                const q = fs.query(ranksRef);
-                const querySnapshot = await fs.getDocs(q);
-                
+                const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0); 
+                const querySnapshot = await fs.getDocs(ranksRef);
                 const allTodayDocs = querySnapshot.docs
                     .map(d => ({ id: d.id, ...d.data() }))
                     .filter(d => d.timestamp && d.timestamp.toDate() >= todayStart);
-
-                const sortedByEntry = [...allTodayDocs].sort((a, b) => {
-                    const timeA = a.timestamp ? a.timestamp.seconds : 0;
-                    const timeB = b.timestamp ? b.timestamp.seconds : 0;
-                    return timeA - timeB;
-                });
-                
+                const sortedByEntry = [...allTodayDocs].sort((a, b) => (a.timestamp?.seconds || 0) - (b.timestamp?.seconds || 0));
                 const rank = sortedByEntry.findIndex(d => d.id === docRef.id) + 1;
-                const totalRecords = allTodayDocs.length;
-
                 const topTenRanks = [...allTodayDocs]
                     .sort((a, b) => a.completionTime - b.completionTime)
                     .slice(0, 10)
-                    .map((data, index) => {
-                        const minutes = Math.floor(data.completionTime / 60);
-                        const seconds = data.completionTime % 60;
-                        return {
-                            rank: index + 1,
-                            name: data.name,
-                            time: `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`,
-                            isPlayer: data.userId === uid
-                        };
-                    });
-
-                return { rank, totalRecords, topTenRanks };
-
-            } catch (e) {
-                console.error("Error processing ranks:", e);
-                return { rank: 'Error', totalRecords: 'Error', topTenRanks: [] };
-            }
+                    .map((data, index) => ({
+                        rank: index + 1,
+                        name: data.name,
+                        time: formatTime(data.completionTime),
+                        isPlayer: data.userId === uid
+                    }));
+                return { rank, totalRecords: allTodayDocs.length, topTenRanks };
+            } catch (e) { return { rank: 'Error' }; }
         }
 
         function renderLeaderboard(ranks) {
             let tableRows = ranks.map(rank => `
-                <tr class="${rank.isPlayer ? 'bg-yellow-400 text-gray-900 font-extrabold shadow-md' : 'bg-gray-700 text-gray-200'} transition hover:bg-yellow-200">
+                <tr class="${rank.isPlayer ? 'bg-yellow-400 text-gray-900 font-extrabold shadow-md' : 'bg-gray-700 text-gray-200'}">
                     <td class="p-2 text-center rounded-l-lg">${rank.rank}</td>
                     <td class="p-2 font-semibold">${rank.name}</td>
                     <td class="p-2 text-right rounded-r-lg font-mono">${rank.time}</td>
                 </tr>
             `).join('');
-
             return `
                 <div class="mt-8 pt-4 border-t border-yellow-600">
-                    <h3 class="text-2xl font-bold text-yellow-500 mb-4 text-center">今日最速黑幫 (Top 10)</h3>
+                    <h3 class="text-2xl font-bold text-yellow-500 mb-4 text-center">今日 Top 10 最速黑幫</h3>
                     <div class="w-full max-w-sm mx-auto">
                         <table class="leaderboard-table w-full text-sm">
-                            <thead>
-                                <tr class="text-gray-400 bg-gray-800">
-                                    <th class="p-1 w-1/6 text-center">排名</th>
-                                    <th class="p-1 w-3/6 text-left">化名</th>
-                                    <th class="p-1 w-2/6 text-right">耗時 (MM:SS)</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${tableRows.length > 0 ? tableRows : '<tr><td colspan="3" class="text-center p-4 text-gray-500 bg-gray-700 rounded-lg">目前沒有紀錄。</td></tr>'}
-                            </tbody>
+                            <thead><tr class="text-gray-400 bg-gray-800"><th class="p-1 w-1/6 text-center">排名</th><th class="p-1 w-3/6 text-left">化名</th><th class="p-1 w-2/6 text-right">耗時</th></tr></thead>
+                            <tbody>${tableRows || '<tr><td colspan="3" class="text-center p-4">目前尚無紀錄</td></tr>'}</tbody>
                         </table>
                     </div>
                 </div>
@@ -503,437 +349,169 @@
         }
 
         function displayNextDialogue() {
-            const dialogueData = DIALOGUE_STEPS(playerName);
-            if (currentDialogueStep >= dialogueData.length) {
-                goToVaultLocate();
-                return;
-            }
-            const step = dialogueData[currentDialogueStep];
+            const data = DIALOGUE_STEPS(playerName);
+            if (currentDialogueStep >= data.length) { goToVaultLocate(); return; }
+            const step = data[currentDialogueStep];
             const currentContent = document.getElementById('dialogue-wrapper');
-            if (currentContent) {
-                currentContent.classList.remove('fade-in');
-                currentContent.classList.add('fade-out');
-            }
+            if (currentContent) currentContent.classList.add('fade-out');
             setTimeout(() => {
                 controlsDiv.innerHTML = '';
-                let wrapper = document.getElementById('dialogue-wrapper');
-                if (!wrapper) {
-                    wrapper = document.createElement('div');
-                    wrapper.id = 'dialogue-wrapper';
-                    contentDiv.appendChild(wrapper);
-                }
-                wrapper.className = 'fade-transition space-y-4'; 
-                const speakerClass = step.speaker === 'BOSS' ? 'text-yellow-400 font-bold' : 'text-green-400 font-bold';
-                const speakerName = step.speaker === 'PLAYER' ? playerName : '老大';
-                wrapper.innerHTML = `
-                    <div class="p-4 bg-gray-700 rounded-lg shadow-inner">
-                        <p class="${speakerClass} mb-2">${speakerName}:</p>
-                        <p class="text-gray-200">${step.text}</p>
-                    </div>
-                `;
-                wrapper.classList.remove('fade-out');
-                wrapper.classList.add('fade-in');
-                const buttonAction = () => {
-                    if (step.action === 'START_MISSION') {
-                        missionStartTime = Date.now(); 
-                        startTimer(); 
-                        goToVaultLocate(); 
-                    } else {
-                        currentDialogueStep++;
-                        displayNextDialogue();
-                    }
-                };
-                renderButton(step.buttonText, buttonAction);
+                let wrapper = document.getElementById('dialogue-wrapper') || document.createElement('div');
+                wrapper.id = 'dialogue-wrapper'; wrapper.className = 'fade-transition space-y-4 fade-in';
+                contentDiv.appendChild(wrapper);
+                const sClass = step.speaker === 'BOSS' ? 'text-yellow-400 font-bold' : 'text-green-400 font-bold';
+                const sName = step.speaker === 'PLAYER' ? playerName : '老大';
+                wrapper.innerHTML = `<div class="p-4 bg-gray-700 rounded-lg shadow-inner"><p class="${sClass} mb-2">${sName}:</p><p class="text-gray-200">${step.text}</p></div>`;
+                renderButton(step.buttonText, () => {
+                    if (step.action === 'START_MISSION') { missionStartTime = Date.now(); startTimer(); goToVaultLocate(); }
+                    else { currentDialogueStep++; displayNextDialogue(); }
+                });
                 window.scrollTo(0, 0); 
-            }, 1000); 
+            }, 800); 
         }
 
         function goToInitialImageScreen() {
-            clearScreen();
-            stopTimer(); 
-            timerDisplay.classList.add('hidden');
+            clearScreen(); stopTimer(); timerDisplay.classList.add('hidden');
             document.body.className = 'min-h-screen flex items-center justify-center p-4 bg-gray-900';
-            container.className = 'bg-gray-800 text-white p-6 md:p-10 rounded-xl shadow-2xl max-w-lg w-full transition-all duration-500';
-            contentDiv.innerHTML = `
-                <div class="text-center space-y-6">
-                    <p class="text-lg text-gray-300">一場秘密行動即將展開...</p>
-                    <img src="cover.jpg" 
-                         onerror="this.onerror=null; this.src='https://placehold.co/400x200/29294F/FFF?text=起始畫面圖片';"
-                         alt="起始畫面圖片" 
-                         class="mx-auto w-full max-w-sm rounded-lg shadow-xl border-2 border-yellow-500 object-cover"
-                    >
-                </div>
-            `;
+            contentDiv.innerHTML = `<div class="text-center space-y-6"><p class="text-lg text-gray-300">一場秘密行動即將展開...</p><img src="cover.jpg" onerror="this.src='https://placehold.co/400x200/29294F/FFF?text=COVER'" class="mx-auto w-full max-w-sm rounded-lg shadow-xl border-2 border-yellow-500 object-cover"></div>`;
             const checkboxArea = document.createElement('div');
             checkboxArea.className = 'mt-6 space-y-3 text-left text-gray-200';
-            checkboxArea.innerHTML = `
-                <label class="flex items-center space-x-3 cursor-pointer">
-                    <input type="checkbox" id="check-network" class="form-checkbox h-5 w-5 text-yellow-500 bg-gray-700 border-gray-500 rounded focus:ring-0">
-                    <span>請確保網路穩定</span>
-                </label>
-                <label class="flex items-center space-x-3 cursor-pointer">
-                    <input type="checkbox" id="check-volume" class="form-checkbox h-5 w-5 text-yellow-500 bg-gray-700 border-gray-500 rounded focus:ring-0">
-                    <span>請打開遊戲音量</span>
-                </label>
-            `;
+            checkboxArea.innerHTML = `<label class="flex items-center space-x-3 cursor-pointer"><input type="checkbox" id="check-network" class="h-5 w-5 text-yellow-500 bg-gray-700 rounded"><span>請確保網路穩定</span></label><label class="flex items-center space-x-3 cursor-pointer"><input type="checkbox" id="check-volume" class="h-5 w-5 text-yellow-500 bg-gray-700 rounded"><span>請打開遊戲音量</span></label>`;
             controlsDiv.appendChild(checkboxArea);
-            const initialButton = document.createElement('button');
-            initialButton.id = 'initial-start-button';
-            initialButton.textContent = "進入秘密任務";
-            initialButton.disabled = true; 
-            initialButton.className = 'gold-button bg-gray-500 cursor-not-allowed text-white px-6 py-3 rounded-lg w-full mt-6 transition-all duration-200';
-            controlsDiv.appendChild(initialButton);
-            function checkPreconditions() {
-                const networkChecked = document.getElementById('check-network').checked;
-                const volumeChecked = document.getElementById('check-volume').checked;
-                const isReady = networkChecked && volumeChecked;
-                initialButton.disabled = !isReady;
-                if (isReady) {
-                    initialButton.classList.remove('bg-gray-500', 'cursor-not-allowed');
-                    initialButton.classList.add('bg-yellow-500', 'hover:bg-yellow-600');
-                    messageArea.classList.add('hidden');
-                } else {
-                    initialButton.classList.add('bg-gray-500', 'cursor-not-allowed');
-                    initialButton.classList.remove('bg-yellow-500', 'hover:bg-yellow-600');
-                }
-            }
-            document.getElementById('check-network').addEventListener('change', checkPreconditions);
-            document.getElementById('check-volume').addEventListener('change', checkPreconditions);
-            initialButton.onclick = () => {
-                if (!initialButton.disabled) {
-                    if (window.auth && !window.auth.currentUser) {
-                        fs.signInAnonymously(auth).catch(error => console.error(error));
-                    }
+            const btn = renderButton("進入秘密任務", () => {
+                if (document.getElementById('check-network').checked && document.getElementById('check-volume').checked) {
+                    if (!window.auth.currentUser) fs.signInAnonymously(auth);
                     goToBossSelection();
-                } else {
-                    showMessage("請確保上方兩項皆已確認", true);
-                }
-            };
+                } else showMessage("請先確認準備事項", true);
+            });
+            btn.className += ' mt-6';
         }
 
         function goToBossSelection() {
-            clearScreen();
-            window.scrollTo(0, 0);
-            selectedBossId = null;
-            document.body.className = 'min-h-screen flex items-center justify-center p-4';
-            container.className = 'bg-gray-800 text-white p-6 md:p-10 rounded-xl shadow-2xl max-w-lg w-full transition-all duration-500';
-            contentDiv.innerHTML = `
-                <h2 class="text-2xl font-bold text-yellow-400 text-center mb-4">你的老大是？</h2>
-                <p class="text-sm text-gray-400 text-center mb-6">*人物不影響故事進行</p>
-                <div id="boss-grid" class="grid grid-cols-3 gap-2"></div>
-            `;
-            const confirmButton = document.createElement('button');
-            confirmButton.id = 'confirm-boss-button';
-            confirmButton.textContent = "我的老大是他/她"; 
-            confirmButton.disabled = true; 
-            confirmButton.className = 'gold-button bg-gray-500 cursor-not-allowed text-white px-6 py-3 rounded-lg w-full mt-6 transition-all duration-200';
-            confirmButton.onclick = () => {
-                 if (window.isAuthReady && window.currentUserId) {
-                    goToNameInput();
-                 } else {
-                    showMessage("伺服器連線中，請稍候再試。", true);
-                 }
-            };
-            controlsDiv.appendChild(confirmButton);
-            const bosses = [1, 2, 3, 4, 5, 6, 7, 8, 9];
-            const gridDiv = document.getElementById('boss-grid');
-            bosses.forEach(id => {
-                const item = document.createElement('div');
-                item.className = 'boss-item relative cursor-pointer border-4 border-transparent rounded-lg overflow-hidden transition-all duration-200 hover:border-yellow-500';
-                item.setAttribute('data-boss-id', id);
-                item.onclick = () => selectBoss(id);
-                item.innerHTML = `
-                    <img src="boss_${id}.png" onerror="this.onerror=null; this.src='https://placehold.co/100x100/3A3A3A/FFF?text=Boss%20${id}';" class="w-full h-full object-cover rounded-md">
-                    <div id="check-${id}" class="boss-check absolute inset-0 bg-black/50 flex items-center justify-center text-4xl text-yellow-400">✓</div>
-                `;
-                gridDiv.appendChild(item);
+            clearScreen(); window.scrollTo(0, 0); selectedBossId = null;
+            contentDiv.innerHTML = `<h2 class="text-2xl font-bold text-yellow-400 text-center mb-4">你的老大是？</h2><p class="text-sm text-gray-400 text-center mb-6">*人物不影響故事進行</p><div id="boss-grid" class="grid grid-cols-3 gap-2"></div>`;
+            const confirmButton = renderButton("我的老大是他/她", () => {
+                 if (window.isAuthReady && window.currentUserId) goToNameInput();
+                 else showMessage("伺服器連線中...", true);
             });
-            function selectBoss(id) {
-                selectedBossId = id;
-                document.querySelectorAll('.boss-item').forEach(item => {
-                    const itemId = parseInt(item.getAttribute('data-boss-id'));
-                    const check = item.querySelector('.boss-check');
-                    if (itemId === id) {
-                        item.classList.add('border-yellow-400');
-                        check.classList.add('opacity-100');
-                    } else {
-                        item.classList.remove('border-yellow-400');
-                        check.classList.remove('opacity-100');
-                    }
-                });
-                if (window.isAuthReady) {
-                    confirmButton.disabled = false;
-                    confirmButton.classList.remove('bg-gray-500', 'cursor-not-allowed');
-                    confirmButton.classList.add('bg-yellow-500', 'hover:bg-yellow-600');
-                } else {
-                    confirmButton.disabled = true;
-                    confirmButton.classList.add('bg-gray-500', 'cursor-not-allowed');
-                    confirmButton.classList.remove('bg-yellow-500', 'hover:bg-yellow-600');
-                    showMessage("伺服器連線中，請稍候。", false);
-                }
-            }
+            confirmButton.disabled = true; confirmButton.className = 'gold-button bg-gray-500 text-white px-6 py-3 rounded-lg w-full mt-6';
+            const grid = document.getElementById('boss-grid');
+            [1,2,3,4,5,6,7,8,9].forEach(id => {
+                const item = document.createElement('div');
+                item.className = 'boss-item relative cursor-pointer border-4 border-transparent rounded-lg overflow-hidden transition-all hover:border-yellow-500';
+                item.innerHTML = `<img src="boss_${id}.png" onerror="this.src='https://placehold.co/100/3A3A3A/FFF?text=${id}'" class="w-full h-full object-cover rounded-md"><div id="check-${id}" class="boss-check absolute inset-0 bg-black/50 flex items-center justify-center text-4xl text-yellow-400">✓</div>`;
+                item.onclick = () => {
+                    selectedBossId = id;
+                    document.querySelectorAll('.boss-item').forEach(el => {
+                        el.classList.remove('border-yellow-400'); el.querySelector('.boss-check').classList.remove('opacity-100');
+                    });
+                    item.classList.add('border-yellow-400'); item.querySelector('.boss-check').classList.add('opacity-100');
+                    if (window.isAuthReady) { confirmButton.disabled = false; confirmButton.classList.remove('bg-gray-500'); confirmButton.classList.add('bg-yellow-500'); }
+                };
+                grid.appendChild(item);
+            });
         }
 
         function goToNameInput() {
-            clearScreen();
-            window.scrollTo(0, 0);
-            contentDiv.innerHTML = `
-                <h2 class="text-2xl font-bold text-yellow-400 text-center mb-6">告訴老大你的代號</h2>
-                <p class="text-md text-gray-400 text-center">這是你獨一無二的身份，將用於紀錄你的通關順序。</p>
-            `;
-            
-            const submitName = async (name) => {
-                const trimmedName = name.trim();
-                if (trimmedName.length >= 2 && trimmedName.length <= 10) {
-                    showMessage("正在驗證代號是否可用...", false);
-                    
-                    try {
-                        const ranksRef = getPublicRanksCollectionRef();
-                        if (!ranksRef) throw new Error("Database not ready");
-
-                        const querySnapshot = await fs.getDocs(ranksRef);
-                        const isDuplicate = querySnapshot.docs.some(doc => doc.data().name === trimmedName);
-
-                        if (isDuplicate) {
-                            showMessage("你的代號已被使用，請更換一個。", true);
-                        } else {
-                            playerName = trimmedName;
-                            showMessage(`代號：${playerName}，確認！`, false);
-                            setTimeout(goToMissionDialogue, 1500); 
-                        }
-                    } catch (e) {
-                        console.error("驗證失敗:", e);
-                        showMessage("連線檢查失敗，請重試。", true);
+            clearScreen(); window.scrollTo(0, 0);
+            contentDiv.innerHTML = `<h2 class="text-2xl font-bold text-yellow-400 text-center mb-6">告訴老大你的代號</h2><p class="text-md text-gray-400 text-center">這是你獨一無二的身份，將用於紀錄通關排名。</p>`;
+            const submitName = async (name, button) => {
+                const trimmed = name.trim();
+                if (trimmed.length < 2) { showMessage("名字太短了。", true); return; }
+                
+                // --- 防連點 & 重複偵測 ---
+                button.disabled = true; button.textContent = "正在驗證中...";
+                try {
+                    const ranksRef = getPublicRanksCollectionRef();
+                    const snap = await fs.getDocs(ranksRef);
+                    const isDuplicate = snap.docs.some(doc => doc.data().name === trimmed);
+                    if (isDuplicate) {
+                        showMessage("你的代號已被使用，請更換一個。", true);
+                        button.disabled = false; button.textContent = "確認代號";
+                    } else {
+                        playerName = trimmed; showMessage(`代號：${playerName}，確認！`, false);
+                        setTimeout(goToMissionDialogue, 1500); 
                     }
-                } else {
-                    showMessage("代號長度需在 2 到 10 個字元之間。", true);
-                }
+                } catch (e) { showMessage("連線檢查失敗。", true); button.disabled = false; button.textContent = "確認代號"; }
             };
-
-            renderInput("請輸入你的黑幫化名（2-10個字）", "確認代號", submitName, 'codename-input', 10);
+            renderInput("輸入黑幫化名 (2-10個字)", "確認代號", submitName, 'codename-input', 10);
             document.getElementById('codename-input').focus();
         }
 
         function goToMissionDialogue() {
-            currentState = GAME_STATE.START;
-            clearScreen();
-            stopTimer();
-            hintsRevealed = 0;
-            timerDisplay.classList.add('hidden'); 
-            startBGM(); 
-            contentDiv.innerHTML = `
-                <div class="text-center mb-6">
-                    <img src="boss_${selectedBossId}.png" onerror="this.onerror=null; this.src='https://placehold.co/120x120/3A3A3A/FFF?text=BOSS';" class="mx-auto w-32 h-32 object-cover rounded-full shadow-lg border-4 border-red-500">
-                </div>
-                <div id="dialogue-content-area" class="space-y-4"></div>
-            `;
-            const dialogueArea = document.getElementById('dialogue-content-area');
-            const wrapper = document.createElement('div');
-            wrapper.id = 'dialogue-wrapper';
-            wrapper.className = 'fade-transition space-y-4';
-            dialogueArea.appendChild(wrapper);
-            currentDialogueStep = 0;
+            clearScreen(); stopTimer(); hintsRevealed = 0; startBGM(); 
+            contentDiv.innerHTML = `<div class="text-center mb-6"><img src="boss_${selectedBossId}.png" onerror="this.src='https://placehold.co/120/3A3A3A/FFF'" class="mx-auto w-32 h-32 object-cover rounded-full shadow-lg border-4 border-red-500"></div><div id="dialogue-content-area" class="space-y-4"></div>`;
             displayNextDialogue();
         }
 
         function goToVaultLocate() {
-            currentState = GAME_STATE.VAULT_LOCATE;
-            clearScreen();
-            window.scrollTo(0, 0);
-            contentDiv.innerHTML = `
-                <p>你現在已經成功潛入賭場放<span class="text-yellow-500 font-bold">金庫</span>的地方！趕快找找金庫在哪裡？</p>
-                <hr class="my-4 border-gray-600">
-                <p class="text-yellow-400"><strong>【行動指示：第一步】</strong></p>
-                <p>仔細觀察現實世界中的金庫寶箱，<strong>密碼鎖是幾位數？</strong></p>
-            `;
-            renderInput("請輸入密碼鎖的位數 (數字)", "確認位數", checkVaultDigits, 'digit-input', 1);
-            document.getElementById('digit-input').type = 'number';
-        }
-
-        function checkVaultDigits(input) {
-            const digitInput = parseInt(input.trim());
-            if (digitInput === 3) {
-                showMessage("數字正確！你發現了金庫密碼是三位數密碼鎖。", false);
-                setTimeout(() => { window.scrollTo(0, 0); goToClueHunt(); }, 2500);
-                return;
-            }
-            let hintMessage = "這個位數不正確。";
-            if (isNaN(digitInput) || digitInput === 0) hintMessage = "請輸入一個數字。";
-            else if (digitInput > 4) hintMessage = "這個數字太大了。";
-            else if (digitInput === 2) hintMessage = "只有兩位數嗎？請再靠近一點數數看。";
-            else if (digitInput === 4) hintMessage = "不對，它不是四位數的。";
-            showMessage(hintMessage, true);
+            clearScreen(); window.scrollTo(0, 0);
+            contentDiv.innerHTML = `<p>潛入成功！趕快找找金庫在哪裡？</p><hr class="my-4 border-gray-600"><p class="text-yellow-400 font-bold">【行動指示：第一步】</p><p>觀察現場金庫，<strong>密碼鎖是幾位數？</strong></p>`;
+            renderInput("密碼鎖位數", "確認位數", (v) => {
+                if (v === "3") { showMessage("正確！是三位數密碼鎖。"); setTimeout(goToClueHunt, 1500); }
+                else showMessage("位數不正確。", true);
+            }, 'digit-input', 1);
         }
 
         function goToClueHunt() {
-            currentState = GAME_STATE.CLUE_HUNT;
-            clearScreen();
-            window.scrollTo(0, 0);
-            contentDiv.innerHTML = `
-                <p>你確認了，金庫鎖需要<strong>三位數密碼</strong>才能打開。同時，你發現<strong>金庫上有一個提示</strong>寫著什麼⋯⋯。</p>
-                <p>金庫密碼每天都會換，但你事前已經調查過，相關提示一定就在金庫附近。</p>
-                <hr class="my-4 border-gray-600">
-                <p class="text-yellow-400"><strong>【行動指示：第二步】</strong></p>
-                <p>環顧四周，尋找周邊物品，什麼東西看起來像是在提供密碼的線索？</p>
-            `;
-            renderInput("請輸入你發現的線索名稱 (例如：紙條、便籤)", "確認線索", checkClue, 'clue-input');
-        }
-
-        function checkClue(input) {
-            const normalizedInput = input.trim().replace(/\s/g, '').toLowerCase();
-            if (normalizedInput === CORRECT_CLUE.toLowerCase()) {
-                showMessage("線索確認！這就是我們要找的！", false);
-                setTimeout(() => { window.scrollTo(0, 0); goToCodeEntry(); }, 1500);
-            } else {
-                let hintMessage = "這個不是我們要找的。";
-                if (input.includes("規則") || input.includes("守則")) hintMessage = "很接近了！試試看完整的名稱！";
-                showMessage(hintMessage, true);
-            }
+            clearScreen(); window.scrollTo(0, 0);
+            contentDiv.innerHTML = `<p>確認是三位密碼。附近一定有提示！</p><hr class="my-4 border-gray-600"><p class="text-yellow-400 font-bold">【行動指示：第二步】</p><p>尋找金庫周邊，線索名稱叫什麼？</p>`;
+            renderInput("線索名稱 (金庫...)", "確認線索", (v) => {
+                if (v.includes("守則")) { showMessage("線索確認！"); setTimeout(goToCodeEntry, 1500); }
+                else showMessage("這不是我們要的線索。", true);
+            }, 'clue-input');
         }
 
         function goToCodeEntry() {
-            currentState = GAME_STATE.CODE_ENTRY;
-            clearScreen();
-            window.scrollTo(0, 0);
-            contentDiv.innerHTML = `
-                <p>很好，你已經掌握了關鍵線索：<strong>【金庫守則】</strong>。</p>
-                <p>結合提示，現在是時候破解三位數密碼了！</p>
-                <hr class="my-4 border-gray-600">
-                <p class="text-yellow-400"><strong>【行動指示：第三步】</strong></p>
-                <p>根據守則內容和提示，推算出三位密碼。金庫裡的金幣等你！</p>
-            `;
-            const hintSection = document.createElement('div');
-            hintSection.className = 'mt-6 p-4 bg-gray-700 rounded-lg shadow-inner';
-            hintSection.innerHTML = `
-                <h3 class="text-xl font-bold text-red-400 mb-2 flex items-center"><span class="text-3xl mr-2">💡</span><span>3個提示</span></h3>
-                <p class="text-sm text-red-300 mb-3">時間歸零仍可打開金庫，但是可能會發生⋯⋯</p>
-                <div id="hint-messages" class="space-y-2"></div>
-            `;
-            const hintButton = document.createElement('button');
-            hintButton.id = 'reveal-hint-button';
-            hintButton.textContent = "每個提示扣除 60秒"; 
-            hintButton.className = 'gold-button bg-red-500 hover:bg-red-600 text-white px-6 py-3 rounded-lg w-full mt-4';
-            hintButton.onclick = revealHint;
-            hintSection.appendChild(hintButton);
-            controlsDiv.appendChild(hintSection);
-            
-            const inputContainer = document.createElement('div');
-            inputContainer.className = 'mt-6 pt-6 border-t border-gray-600';
-            const input = document.createElement('input');
-            input.id = 'code-input';
-            input.type = 'number';
-            input.maxLength = 3;
-            input.placeholder = "每輸錯一次扣除30秒";
-            input.className = 'p-3 rounded-lg bg-gray-700 text-white border-2 border-yellow-500 focus:outline-none focus:border-yellow-400 w-full';
-            const button = document.createElement('button');
-            button.textContent = "解鎖金庫！";
-            button.className = 'gold-button bg-yellow-500 hover:bg-yellow-600 text-gray-900 px-6 py-3 rounded-lg w-full mt-3';
-            button.onclick = () => checkCode(document.getElementById('code-input').value);
-            inputContainer.appendChild(input);
-            inputContainer.appendChild(button);
-            controlsDiv.appendChild(inputContainer);
-        }
-
-        function checkCode(input) {
-            const normalizedInput = input.trim();
-            if (normalizedInput === CORRECT_CODE) {
-                showMessage("密碼正確！金庫鎖正在解開...", false);
-                
-                const penaltyTimeTaken = INITIAL_TIME_SECONDS - Math.max(0, timeLeft);
-                const actualTimeElapsed = Math.floor((Date.now() - missionStartTime) / 1000);
-                completionTime = Math.max(penaltyTimeTaken, actualTimeElapsed); 
-
-                // 統一進入結算畫面，由結算邏輯決定顯示哪張圖片
-                setTimeout(() => handleMissionComplete(), 2000);
-            } else {
-                timeLeft = Math.max(0, timeLeft - 30);
-                if (timeLeft <= 0) { stopTimer(); showMessage(`時間已用盡！`, true); updateTimer(); }
-                else { showMessage(`密碼錯誤！扣除30秒`, true); updateTimer(); }
-            }
+            clearScreen(); window.scrollTo(0, 0);
+            contentDiv.innerHTML = `<p>掌握守則了！現在破解最終密碼！</p><hr class="my-4 border-gray-600"><p class="text-yellow-400 font-bold">【行動指示：第三步】</p>`;
+            const hintSection = document.createElement('div'); hintSection.className = 'mt-6 p-4 bg-gray-700 rounded-lg shadow-inner';
+            hintSection.innerHTML = `<h3 class="text-xl font-bold text-red-400 mb-2 flex items-center">💡 3個提示</h3><div id="hint-messages" class="space-y-2"></div>`;
+            const hintBtn = document.createElement('button'); hintBtn.id = 'reveal-hint-button'; hintBtn.textContent = "每個提示扣除 60秒"; 
+            hintBtn.className = 'gold-button bg-red-500 text-white px-6 py-3 rounded-lg w-full mt-4'; hintBtn.onclick = revealHint;
+            hintSection.appendChild(hintBtn); controlsDiv.appendChild(hintSection);
+            renderInput("輸入密碼 (每錯一次扣30秒)", "解鎖金庫！", (v, btn) => {
+                if (v === CORRECT_CODE) {
+                    btn.disabled = true; btn.textContent = "正在通報老大中...";
+                    const penaltyTaken = INITIAL_TIME_SECONDS - Math.max(0, timeLeft);
+                    const actualTaken = Math.floor((Date.now() - missionStartTime) / 1000);
+                    completionTime = Math.max(penaltyTaken, actualTaken); 
+                    setTimeout(handleMissionComplete, 2000);
+                } else {
+                    timeLeft = Math.max(0, timeLeft - 30); updateTimer();
+                    if (timeLeft <= 0) { stopTimer(); showMessage("時間已用盡！仍可解鎖但獎勵受限。", true); }
+                    else showMessage("密碼錯誤！扣除30秒。", true);
+                }
+            }, 'code-input', 3);
         }
 
         async function handleMissionComplete() {
-            currentState = GAME_STATE.SUCCESS;
-            bgm.pause();
-            stopTimer();
-            timerDisplay.classList.add('hidden');
-            clearScreen();
-            window.scrollTo(0, 0);
-
-            contentDiv.innerHTML = `
-                <div class="text-center py-10">
-                    <h2 class="text-3xl font-bold text-yellow-400 mb-4">正在回傳戰報並計算排名...</h2>
-                    <p class="text-lg text-gray-400">正在等待伺服器確認您的通關紀錄。</p>
-                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-yellow-500 mx-auto mt-6"></div>
-                </div>
-            `;
-
-            // 這裡的 isLate 僅用於記錄到資料庫，不直接決定 UI
-            const isLateRecord = completionTime > INITIAL_TIME_SECONDS;
-            const { rank, totalRecords, topTenRanks } = await recordCompletionAndShowRank(isLateRecord);
-
-            // --- 核心邏輯修正：判斷顯示 SUCCESS 還是 LATE ---
-            // 條件：排名在前 50 名 (含) 且 結算時間在 600 秒 (含) 內
+            stopTimer(); bgm.pause(); clearScreen(); window.scrollTo(0, 0);
+            contentDiv.innerHTML = `<div class="text-center py-10"><h2 class="text-3xl font-bold text-yellow-400 mb-4 text-shadow-custom">正在回傳戰報...</h2><div class="animate-spin rounded-full h-12 w-12 border-b-2 border-yellow-500 mx-auto mt-6"></div></div>`;
+            const isLateRec = completionTime > INITIAL_TIME_SECONDS;
+            const { rank, totalRecords, topTenRanks } = await recordCompletionAndShowRank(isLateRec);
+            
+            // --- 核心邏輯：前 50 位 且 10 分鐘內 ---
             const isGrandSuccess = (rank !== 'Error' && rank <= 50) && (completionTime <= INITIAL_TIME_SECONDS);
-
-            if (isGrandSuccess) {
-                successSound.play().catch(e => console.log(e));
-            } else {
-                lateSound.play().catch(e => console.log(e));
-            }
+            if (isGrandSuccess) successSound.play(); else lateSound.play();
 
             document.body.className = 'min-h-screen flex items-center justify-center p-4 success-bg';
-            container.className = 'bg-yellow-100 text-gray-900 p-6 md:p-10 rounded-xl shadow-2xl max-w-lg w-full transition-all duration-500 border-4 border-yellow-700';
-
+            container.className = 'bg-yellow-100 text-gray-900 p-6 md:p-10 rounded-xl shadow-2xl max-w-lg w-full border-4 border-yellow-700';
             contentDiv.innerHTML = `
                 <div class="text-center">
-                    <h2 class="text-4xl md:text-5xl font-extrabold text-yellow-700 mt-4 animate-bounce">
-                        ${isGrandSuccess ? '你成功打開金庫！' : '行動成功，但...'}
-                    </h2>
-                    <p class="text-xl font-bold mb-2">
-                        代號: <span class="text-red-600">${playerName}</span>
-                    </p>
-                    <p class="text-2xl font-extrabold mb-4 text-red-700">
-                        耗時: ${completionTime} 秒
-                    </p>
-                    <p class="text-lg font-semibold mb-6 p-2 bg-yellow-200 rounded-lg shadow-md">
-                        ${isGrandSuccess ? '🎉' : '⏱️'} 今日第 <span class="text-red-700 font-extrabold">${rank}</span> 位通關玩家! (共 ${totalRecords} 筆紀錄)
-                    </p>
-
-                    <img src="${isGrandSuccess ? 'SUCCESS_IMAGE.png' : 'LATE_IMAGE.png'}" 
-                         onerror="this.onerror=null; this.src='https://placehold.co/200x150/FFD700/000?text=${isGrandSuccess ? 'WIN' : 'LATE'}';"
-                         alt="任務結算圖" 
-                         class="mx-auto w-1/2 max-w-sm object-contain mb-4 shadow-lg"
-                    >
-                    
-                    <p class="mt-6 text-xl">
-                        ${isGrandSuccess ? '金山銀山就在眼前，你得手了！' : '沒想到你來的太晚，或者任務出了點差錯，只剩下⋯⋯'}
-                    </p>
-                    <p class="mt-4 text-2xl font-bold p-3 bg-yellow-300 rounded-lg">
-                        <strong>請到簽到處出示這個畫面領取你的獎勵！</strong>
-                    </p>
+                    <h2 class="text-4xl font-extrabold text-yellow-700 mt-4 animate-bounce">${isGrandSuccess ? '你成功打開金庫！' : '行動成功，但...'}</h2>
+                    <p class="text-xl font-bold mb-2">代號: <span class="text-red-600">${playerName}</span></p>
+                    <p class="text-2xl font-extrabold mb-4 text-red-700">耗時: ${completionTime} 秒</p>
+                    <p class="text-lg font-semibold mb-6 p-2 bg-yellow-200 rounded-lg shadow-md">${isGrandSuccess ? '🎉' : '⏱️'} 今日第 <span class="text-red-700 font-extrabold">${rank}</span> 位通關玩家! (共 ${totalRecords} 筆)</p>
+                    <img src="${isGrandSuccess ? 'SUCCESS_IMAGE.png' : 'LATE_IMAGE.png'}" onerror="this.src='https://placehold.co/200/FFD700/000?text=${isGrandSuccess ? 'WIN' : 'LATE'}'" class="mx-auto w-1/2 mb-4 shadow-lg">
+                    <p class="mt-6 text-xl">${isGrandSuccess ? '限量獎勵就在眼前，你得手了！' : '沒想到你來的太晚，或者任務逾時，只剩下剩餘獎勵⋯⋯'}</p>
+                    <p class="mt-4 text-2xl font-bold p-3 bg-yellow-300 rounded-lg"><strong>請到簽到處領取獎勵！</strong></p>
                     ${renderLeaderboard(topTenRanks)}
                 </div>
             `;
-            controlsDiv.innerHTML = '';
-        }
-
-        function gameOver() {
-            currentState = GAME_STATE.FAIL;
-            clearScreen(); stopTimer(); window.scrollTo(0, 0);
-            container.className = 'bg-red-900 text-white p-6 md:p-10 rounded-xl shadow-2xl max-w-lg w-full transition-all duration-500 border-4 border-red-700';
-            contentDiv.innerHTML = `
-                <div class="text-center">
-                    <h2 class="text-4xl md:text-5xl font-extrabold text-red-400 mt-4">行動失敗！</h2>
-                    <p class="mt-6 text-xl">換班的保鏢已經到達，你被抓個正著。金幣夢碎！</p>
-                    <p class="mt-4">下次準備更充分再來吧。</p>
-                </div>
-            `;
-            renderButton("重新開始", goToInitialImageScreen); 
         }
 
         window.onload = initGame;
-        
     </script>
 </body>
 </html>
