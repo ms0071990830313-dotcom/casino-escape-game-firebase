@@ -73,6 +73,14 @@
             opacity: 0;
             transition: opacity 0.2s;
         }
+        /* 排行榜表格樣式 */
+        .leaderboard-table {
+            border-collapse: separate;
+            border-spacing: 0 5px; /* 增加行間距 */
+        }
+        .leaderboard-table td {
+            padding: 8px;
+        }
     </style>
     
     <!-- 引入 Firebase SDK -->
@@ -109,7 +117,8 @@
                 window.currentUserId = user.uid;
                 console.log("Firebase: 匿名登入成功. User ID:", user.uid);
             } else {
-                console.log("Firebase: 等待匿名登入.");
+                window.currentUserId = null; // 確保失敗時為 null
+                console.log("Firebase: 認證失敗或等待中.");
             }
             window.isAuthReady = true;
             
@@ -219,7 +228,7 @@
             },
             {
                 speaker: 'BOSS',
-                text: `現在，你趁保鏢在打瞌睡，已經偷偷潛入到了賭場的金庫位置。<br>噓！小心不要被發現！<br><span class="text-yellow-400 font-bold">十分鐘內</span>你必須解出這個謎題，不然換班的人就要來了，你會被抓個正著！<br>仔細查看金庫在哪裡？還有密碼，你需要知道密碼是幾位數。`,
+                text: `現在，你趁保鏢在打瞌睡，已經偷偷潛入到了賭場的金庫位置。<br>噓！小心不要被發現！<br><span class="text-yellow-400 font-bold">十分鐘內</span>你必須解出這個謎題，不然換班的人就要來了，你會被抓個正著！<br>仔細查看金庫在哪裡？還有密碼，你需要知道密碼是幾位數.`,
                 buttonText: "偷偷潛入金庫",
                 action: 'START_MISSION'
             }
@@ -259,7 +268,7 @@
             goToInitialImageScreen();
         }
         
-        // --- 音樂/計時器/輔助函數 (略，內容與之前相同) ---
+        // --- 音樂/計時器/輔助函數 ---
         function startBGM() {
             if (bgm && bgm.paused) {
                 bgm.volume = 0.5;
@@ -358,7 +367,7 @@
             controlsDiv.appendChild(constContainer);
         }
         function revealHint() {
-            if (hintsRevealed >= HINTS.length) {
+            if (hintsRevealed >= 3) { // 假設 HINTS 陣列長度為 3
                 showMessage("已經沒有更多提示了！", true);
                 return;
             }
@@ -373,6 +382,12 @@
                 updateTimer();
             }
             
+            // 這裡原本應該從 HINTS 陣列取值，若無陣列則使用靜態字串
+            const HINTS = [
+                "提示 1: 看看守則第一條，標題的顏色是否藏著數字？",
+                "提示 2: 守則提到方向：上、下、左、右，分別對應刻度位置。",
+                "提示 3: 將所有發現的數字，依照守則末尾的字母順序排列。"
+            ];
             const hintText = HINTS[hintsRevealed];
             const hintDiv = document.getElementById('hint-messages');
             
@@ -409,11 +424,11 @@
         async function recordCompletionAndShowRank(isLate) {
             if (!db || !currentUserId) {
                 console.error("無法寫入紀錄：Firebase 或 User ID 尚未準備好。");
-                return { rank: 'N/A', totalRecords: 'N/A' };
+                return { rank: 'N/A', totalRecords: 'N/A', topTenRanks: [] };
             }
 
             const ranksRef = getPublicRanksCollectionRef();
-            if (!ranksRef) return { rank: 'N/A', totalRecords: 'N/A' };
+            if (!ranksRef) return { rank: 'N/A', totalRecords: 'N/A', topTenRanks: [] };
 
             const newRecord = {
                 name: playerName,
@@ -431,44 +446,102 @@
                 console.log("Record added with ID:", docRef.id);
             } catch (e) {
                 console.error("Error adding document:", e);
-                return { rank: 'Error', totalRecords: 'Error' };
+                return { rank: 'Error', totalRecords: 'Error', topTenRanks: [] };
             }
 
-            // 2. 獲取當天的所有紀錄並排序
-            
             // 獲取當天零點的時間戳 (用於每日重設篩選)
             const todayStart = new Date();
             todayStart.setHours(0, 0, 0, 0); 
             const todayTimestamp = fs.Timestamp.fromDate(todayStart);
 
-            // 查詢當天所有紀錄，按時間升序排列
-            const q = fs.query(
+            // 2. 查詢 1: 計算玩家的通關順序 (Entry Rank)
+            const q_entry = fs.query(
                 ranksRef,
                 fs.where("timestamp", ">=", todayTimestamp), 
                 fs.orderBy("timestamp", "asc")
             );
+            let entryRank = 'N/A';
+            let totalRecords = 0;
 
             try {
-                const querySnapshot = await fs.getDocs(q);
-                let rank = 'N/A';
-                const totalRecords = querySnapshot.docs.length;
-
-                // 3. 計算排名
-                querySnapshot.docs.forEach((doc, index) => {
-                    // 檢查 userId 是否匹配，或者檢查文檔ID是否匹配
+                const entrySnapshot = await fs.getDocs(q_entry);
+                totalRecords = entrySnapshot.docs.length;
+                entrySnapshot.docs.forEach((doc, index) => {
                     if (doc.id === docRef.id) {
-                        rank = index + 1;
+                        entryRank = index + 1;
                     }
                 });
-                
-                return { rank: rank, totalRecords: totalRecords };
-
             } catch (e) {
-                console.error("Error fetching documents:", e);
-                return { rank: 'Error', totalRecords: 'Error' };
+                console.error("Error fetching entry rank:", e);
             }
+            
+            // 3. 查詢 2: 獲取 Top 10 排行榜 (按 completionTime 排序)
+            const q_leaderboard = fs.query(
+                ranksRef,
+                fs.where("timestamp", ">=", todayTimestamp), 
+                fs.orderBy("completionTime", "asc"), // 按通關時間排序
+                fs.limit(10) // 限制前 10 名
+            );
+
+            let topTenRanks = [];
+
+            try {
+                const leaderboardSnapshot = await fs.getDocs(q_leaderboard);
+                leaderboardSnapshot.docs.forEach((doc, index) => {
+                    const data = doc.data();
+                    // 格式化時間為 MM:SS
+                    const minutes = Math.floor(data.completionTime / 60);
+                    const seconds = data.completionTime % 60;
+                    const timeFormatted = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+                    
+                    topTenRanks.push({
+                        rank: index + 1,
+                        name: data.name,
+                        time: timeFormatted,
+                        isPlayer: data.userId === currentUserId // 標記當前玩家
+                    });
+                });
+            } catch (e) {
+                console.error("Error fetching leaderboard:", e);
+            }
+
+            return { 
+                rank: entryRank, 
+                totalRecords: totalRecords, 
+                topTenRanks: topTenRanks 
+            };
         }
 
+        // Helper function to render the leaderboard table
+        function renderLeaderboard(ranks) {
+            let tableRows = ranks.map(rank => `
+                <tr class="${rank.isPlayer ? 'bg-yellow-400 text-gray-900 font-extrabold shadow-md' : 'bg-gray-700 text-gray-200'} transition hover:bg-yellow-200">
+                    <td class="p-2 text-center rounded-l-lg">${rank.rank}</td>
+                    <td class="p-2 font-semibold">${rank.name}</td>
+                    <td class="p-2 text-right rounded-r-lg font-mono">${rank.time}</td>
+                </tr>
+            `).join('');
+
+            return `
+                <div class="mt-8 pt-4 border-t border-yellow-600">
+                    <h3 class="text-2xl font-bold text-yellow-500 mb-4 text-center">今日最速黑幫 (Top 10)</h3>
+                    <div class="w-full max-w-sm mx-auto">
+                        <table class="leaderboard-table w-full text-sm">
+                            <thead>
+                                <tr class="text-gray-400 bg-gray-800">
+                                    <th class="p-1 w-1/6 text-center">排名</th>
+                                    <th class="p-1 w-3/6 text-left">化名</th>
+                                    <th class="p-1 w-2/6 text-right">耗時 (MM:SS)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${tableRows.length > 0 ? tableRows : '<tr><td colspan="3" class="text-center p-4 text-gray-500 bg-gray-700 rounded-lg">目前沒有紀錄。</td></tr>'}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        }
 
         // --- 流程控制函數 ---
 
@@ -649,7 +722,7 @@
             // 只有當 Auth Ready 且選完老大後才能進入下一步
             confirmButton.onclick = () => {
                  // 修正點：在點擊時，如果 Firebase 未準備好，提示用戶，否則進入下一步
-                 if (isAuthReady && currentUserId) {
+                 if (window.isAuthReady && window.currentUserId) {
                     goToNameInput();
                  } else {
                     showMessage("伺服器連線中，請稍候再試。", true);
@@ -697,7 +770,7 @@
                 });
 
                 // 修正點：選擇老大後，立即檢查 Auth 狀態並嘗試啟用按鈕
-                if (isAuthReady) {
+                if (window.isAuthReady) {
                     confirmButton.disabled = false;
                     confirmButton.classList.remove('bg-gray-500', 'cursor-not-allowed');
                     confirmButton.classList.add('bg-yellow-500', 'hover:bg-yellow-600');
@@ -840,9 +913,7 @@
                 <p>金庫密碼每天都會換，但你事前已經調查過，賭場主人記性很差，<strong>相關的提示一定就在金庫附近</strong>。</p>
                 <hr class="my-4 border-gray-600">
                 <p class="text-yellow-400"><strong>【行動指示：第二步】</strong></p>
-                <!-- --- 修改點 3: 提示文字 --- -->
                 <p>環顧四周，尋找周邊物品，什麼東西看起來像是在提供密碼的線索？</p>
-                <!-- --- 修改點 3 結束 --- -->
             `;
 
             renderInput("請輸入你發現的線索名稱 (例如：紙條、便籤)", "確認線索", checkClue, 'clue-input');
@@ -991,7 +1062,7 @@
             `;
 
             // --- Firebase 紀錄與排名計算 ---
-            const { rank, totalRecords } = await recordCompletionAndShowRank(isLate);
+            const { rank, totalRecords, topTenRanks } = await recordCompletionAndShowRank(isLate);
 
             document.body.className = 'min-h-screen flex items-center justify-center p-4 success-bg';
             container.className = 'bg-yellow-100 text-gray-900 p-6 md:p-10 rounded-xl shadow-2xl max-w-lg w-full transition-all duration-500 border-4 border-yellow-700';
@@ -1026,6 +1097,8 @@
                     <p class="mt-4 text-2xl font-bold p-3 bg-yellow-300 rounded-lg">
                         <strong>請到簽到處出示這個畫面領取你的金幣！</strong>
                     </p>
+                    <!-- 排行榜顯示區 -->
+                    ${renderLeaderboard(topTenRanks)}
                 </div>
             `;
             controlsDiv.innerHTML = '';
@@ -1057,7 +1130,7 @@
             `;
             
             // --- Firebase 紀錄與排名計算 ---
-            const { rank, totalRecords } = await recordCompletionAndShowRank(isLate);
+            const { rank, totalRecords, topTenRanks } = await recordCompletionAndShowRank(isLate);
 
             document.body.className = 'min-h-screen flex items-center justify-center p-4 success-bg';
             container.className = 'bg-yellow-100 text-gray-900 p-6 md:p-10 rounded-xl shadow-2xl max-w-lg w-full transition-all duration-500 border-4 border-yellow-700';
@@ -1091,6 +1164,8 @@
                     <p class="mt-4 text-2xl font-bold p-3 bg-yellow-300 rounded-lg">
                         <strong>請到簽到處出示這個畫面領取你的獎勵！</strong>
                     </p>
+                    <!-- 排行榜顯示區 -->
+                    ${renderLeaderboard(topTenRanks)}
                 </div>
             `;
             controlsDiv.innerHTML = '';
@@ -1123,7 +1198,6 @@
         }
 
         // --- 啟動遊戲 ---
-        // 修正點 3: 確保在 DOM 載入後，initGame 被呼叫
         window.onload = initGame;
         
     </script>
