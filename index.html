@@ -121,8 +121,6 @@
                 console.log("Firebase: 認證失敗或等待中.");
             }
             window.isAuthReady = true;
-            
-            // 如果 initGame 已經在 window.onload 中觸發，這裡無需再次呼叫
         });
         
         // 將必要的 Firebase 函數暴露給主腳本
@@ -669,18 +667,28 @@
             document.getElementById('check-volume').addEventListener('change', checkPreconditions);
 
             // --- 處理按鈕點擊 (即使被禁用也需要檢查) ---
-            initialButton.onclick = () => {
+            initialButton.onclick = async () => {
                 if (!initialButton.disabled) {
-                    // 執行 Firebase 匿名登入
-                    // 只有在 Firebase 載入成功且未登入時才執行登入 (避免重複登入)
-                    if (window.auth && !window.auth.currentUser) {
-                        fs.signInAnonymously(auth).then(() => {
-                            console.log("Anonymous sign-in triggered.");
-                        }).catch(error => {
-                            console.error("Anonymous sign-in failed:", error);
-                            showMessage("連線至伺服器失敗，請檢查網路。", true);
-                        });
+                    
+                    // 檢查 Firebase 載入是否已完成，否則顯示載入中
+                    if (!isAuthReady) {
+                        showMessage("正在連線伺服器，請稍候...", true);
+                        return;
                     }
+
+                    // 執行 Firebase 匿名登入 (如果還沒登入)
+                    if (!window.auth.currentUser) {
+                        try {
+                            // 強制等待登入完成
+                            await fs.signInAnonymously(auth);
+                            console.log("Anonymous sign-in forced and completed.");
+                        } catch (error) {
+                            console.error("Anonymous sign-in failed:", error);
+                            showMessage("連線失敗！請檢查您的 Firebase 匿名認證是否已啟用。", true);
+                            return; // 登入失敗則中止流程
+                        }
+                    }
+
                     goToBossSelection();
                 } else {
                     showMessage("請確保上方兩項皆已確認", true);
@@ -715,11 +723,12 @@
             
             // 只有當 Auth Ready 且選完老大後才能進入下一步
             confirmButton.onclick = () => {
-                 // 修正點：在點擊時，如果 Firebase 未準備好，提示用戶，否則進入下一步
-                 if (isAuthReady && currentUserId) {
+                 // 修正點：由於登入已在上一頁強制完成，這裡只需要檢查 currentUserId
+                 if (currentUserId) {
                     goToNameInput();
                  } else {
-                    showMessage("伺服器連線中，請稍候再試。", true);
+                    // 如果 currentUserId 為空，表示登入失敗
+                    showMessage("連線錯誤：請檢查 Firebase 匿名認證是否已啟用。", true);
                  }
             };
             controlsDiv.appendChild(confirmButton);
@@ -763,17 +772,17 @@
                     }
                 });
 
-                // 修正點：選擇老大後，立即檢查 Auth 狀態並嘗試啟用按鈕
-                if (isAuthReady) {
+                // 修正點：選擇老大後，立即檢查 currentUserId 狀態並啟用按鈕
+                if (currentUserId) {
                     confirmButton.disabled = false;
                     confirmButton.classList.remove('bg-gray-500', 'cursor-not-allowed');
                     confirmButton.classList.add('bg-yellow-500', 'hover:bg-yellow-600');
                 } else {
-                    // 如果認證未完成，保持禁用，並提示用戶
+                    // 如果認證未完成，保持禁用
                     confirmButton.disabled = true;
                     confirmButton.classList.add('bg-gray-500', 'cursor-not-allowed');
                     confirmButton.classList.remove('bg-yellow-500', 'hover:bg-yellow-600');
-                    showMessage("伺服器連線中，請稍候。", false); // 提示用戶等待連線
+                    showMessage("伺服器連線中，請稍候。", false); 
                 }
             }
         }
@@ -915,7 +924,7 @@
             renderInput("請輸入你發現的線索名稱 (例如：紙條、便籤)", "確認線索", checkClue, 'clue-input');
         }
 
-        /** 檢查線索是否正確 */
+        /** 檢查密碼是否正確 */
         function checkClue(input) {
             const normalizedInput = input.trim().replace(/\s/g, '').toLowerCase();
             
