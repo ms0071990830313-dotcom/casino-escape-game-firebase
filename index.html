@@ -263,7 +263,7 @@
             if (bgm && bgm.paused) {
                 bgm.volume = 0.5;
                 bgm.play().catch(error => {
-                    console.log("BGM 自動播放失敗，可能是瀏覽器限制。", error);
+                    console.log("BGM 自動播放失敗。", error);
                 });
             }
         }
@@ -316,7 +316,7 @@
             messageArea.classList.remove('hidden');
             setTimeout(() => {
                 messageArea.classList.add('hidden');
-            }, 3000);
+            }, 3500);
         }
         function clearScreen() {
             contentDiv.innerHTML = '';
@@ -399,19 +399,12 @@
 
         // --- 核心邏輯：紀錄通關時間與排名計算 ---
 
-        /** 取得 Firestore 排名 Collection 的路徑 */
         function getPublicRanksCollectionRef() {
-            if (!db || !APP_ID) {
-                console.error("Firestore DB 或 APP_ID 尚未初始化.");
-                return null;
-            }
-            // 使用公共路徑 /artifacts/{appId}/public/data/{collectionName}
+            if (!db || !APP_ID) return null;
             return fs.collection(db, `artifacts/${APP_ID}/public/data/puzzle_ranks`);
         }
 
-        /** 寫入通關紀錄並獲取排名 */
         async function recordCompletionAndShowRank(isLate) {
-            // 重要修正：必須直接從 window.currentUserId 獲取，因為異步登入後，window 的值會更新
             const uid = window.currentUserId;
             if (!db || !uid) {
                 console.error("無法寫入紀錄：Firebase 或 User ID 尚未準備好。");
@@ -430,33 +423,24 @@
                 bossId: selectedBossId
             };
             
-            // 1. 寫入新的通關紀錄
             let docRef;
             try {
                 docRef = await fs.addDoc(ranksRef, newRecord);
-                console.log("Record added with ID:", docRef.id);
             } catch (e) {
                 console.error("Error adding document:", e);
                 return { rank: 'Error', totalRecords: 'Error', topTenRanks: [] };
             }
 
-            // 2. 獲取數據並在內存中處理 (遵循 Rule 2，避免複合查詢索引問題)
             try {
-                // 獲取當天零點的時間戳
                 const todayStart = new Date();
                 todayStart.setHours(0, 0, 0, 0); 
-                const todayTimestamp = fs.Timestamp.fromDate(todayStart);
-
-                // 只執行基礎查詢
                 const q = fs.query(ranksRef);
                 const querySnapshot = await fs.getDocs(q);
                 
-                // 在內存中過濾今日數據
                 const allTodayDocs = querySnapshot.docs
                     .map(d => ({ id: d.id, ...d.data() }))
                     .filter(d => d.timestamp && d.timestamp.toDate() >= todayStart);
 
-                // 計算玩家的通關順序 (按 timestamp 排序)
                 const sortedByEntry = [...allTodayDocs].sort((a, b) => {
                     const timeA = a.timestamp ? a.timestamp.seconds : 0;
                     const timeB = b.timestamp ? b.timestamp.seconds : 0;
@@ -466,7 +450,6 @@
                 const rank = sortedByEntry.findIndex(d => d.id === docRef.id) + 1;
                 const totalRecords = allTodayDocs.length;
 
-                // 獲取 Top 10 排行榜 (按 completionTime 排序)
                 const topTenRanks = [...allTodayDocs]
                     .sort((a, b) => a.completionTime - b.completionTime)
                     .slice(0, 10)
@@ -489,7 +472,6 @@
             }
         }
 
-        // Helper function to render the leaderboard table
         function renderLeaderboard(ranks) {
             let tableRows = ranks.map(rank => `
                 <tr class="${rank.isPlayer ? 'bg-yellow-400 text-gray-900 font-extrabold shadow-md' : 'bg-gray-700 text-gray-200'} transition hover:bg-yellow-200">
@@ -520,29 +502,20 @@
             `;
         }
 
-        // --- 流程控制函數 ---
-
-        /** 逐步顯示對話內容 */
         function displayNextDialogue() {
             const dialogueData = DIALOGUE_STEPS(playerName);
             if (currentDialogueStep >= dialogueData.length) {
                 goToVaultLocate();
                 return;
             }
-
             const step = dialogueData[currentDialogueStep];
-
-            // 1. 淡出舊內容
             const currentContent = document.getElementById('dialogue-wrapper');
             if (currentContent) {
                 currentContent.classList.remove('fade-in');
                 currentContent.classList.add('fade-out');
             }
-            
-            // 2. 延遲後更新內容並淡入
             setTimeout(() => {
                 controlsDiv.innerHTML = '';
-                
                 let wrapper = document.getElementById('dialogue-wrapper');
                 if (!wrapper) {
                     wrapper = document.createElement('div');
@@ -550,11 +523,8 @@
                     contentDiv.appendChild(wrapper);
                 }
                 wrapper.className = 'fade-transition space-y-4'; 
-                
-                // 決定說話者樣式
                 const speakerClass = step.speaker === 'BOSS' ? 'text-yellow-400 font-bold' : 'text-green-400 font-bold';
                 const speakerName = step.speaker === 'PLAYER' ? playerName : '老大';
-
                 wrapper.innerHTML = `
                     <div class="p-4 bg-gray-700 rounded-lg shadow-inner">
                         <p class="${speakerClass} mb-2">${speakerName}:</p>
@@ -563,8 +533,6 @@
                 `;
                 wrapper.classList.remove('fade-out');
                 wrapper.classList.add('fade-in');
-                
-                // 3. 渲染按鈕
                 const buttonAction = () => {
                     if (step.action === 'START_MISSION') {
                         missionStartTime = Date.now(); 
@@ -575,22 +543,17 @@
                         displayNextDialogue();
                     }
                 };
-
                 renderButton(step.buttonText, buttonAction);
                 window.scrollTo(0, 0); 
             }, 1000); 
         }
 
-        
-        /** 前置階段: 初始圖片畫面 */
         function goToInitialImageScreen() {
             clearScreen();
             stopTimer(); 
             timerDisplay.classList.add('hidden');
-
             document.body.className = 'min-h-screen flex items-center justify-center p-4 bg-gray-900';
             container.className = 'bg-gray-800 text-white p-6 md:p-10 rounded-xl shadow-2xl max-w-lg w-full transition-all duration-500';
-
             contentDiv.innerHTML = `
                 <div class="text-center space-y-6">
                     <p class="text-lg text-gray-300">一場秘密行動即將展開...</p>
@@ -601,7 +564,6 @@
                     >
                 </div>
             `;
-            
             const checkboxArea = document.createElement('div');
             checkboxArea.className = 'mt-6 space-y-3 text-left text-gray-200';
             checkboxArea.innerHTML = `
@@ -615,21 +577,17 @@
                 </label>
             `;
             controlsDiv.appendChild(checkboxArea);
-
             const initialButton = document.createElement('button');
             initialButton.id = 'initial-start-button';
             initialButton.textContent = "進入秘密任務";
             initialButton.disabled = true; 
             initialButton.className = 'gold-button bg-gray-500 cursor-not-allowed text-white px-6 py-3 rounded-lg w-full mt-6 transition-all duration-200';
             controlsDiv.appendChild(initialButton);
-
             function checkPreconditions() {
                 const networkChecked = document.getElementById('check-network').checked;
                 const volumeChecked = document.getElementById('check-volume').checked;
-
                 const isReady = networkChecked && volumeChecked;
                 initialButton.disabled = !isReady;
-
                 if (isReady) {
                     initialButton.classList.remove('bg-gray-500', 'cursor-not-allowed');
                     initialButton.classList.add('bg-yellow-500', 'hover:bg-yellow-600');
@@ -639,10 +597,8 @@
                     initialButton.classList.remove('bg-yellow-500', 'hover:bg-yellow-600');
                 }
             }
-
             document.getElementById('check-network').addEventListener('change', checkPreconditions);
             document.getElementById('check-volume').addEventListener('change', checkPreconditions);
-
             initialButton.onclick = () => {
                 if (!initialButton.disabled) {
                     if (window.auth && !window.auth.currentUser) {
@@ -659,22 +615,18 @@
             clearScreen();
             window.scrollTo(0, 0);
             selectedBossId = null;
-
             document.body.className = 'min-h-screen flex items-center justify-center p-4';
             container.className = 'bg-gray-800 text-white p-6 md:p-10 rounded-xl shadow-2xl max-w-lg w-full transition-all duration-500';
-
             contentDiv.innerHTML = `
                 <h2 class="text-2xl font-bold text-yellow-400 text-center mb-4">你的老大是？</h2>
                 <p class="text-sm text-gray-400 text-center mb-6">*人物不影響故事進行</p>
                 <div id="boss-grid" class="grid grid-cols-3 gap-2"></div>
             `;
-            
             const confirmButton = document.createElement('button');
             confirmButton.id = 'confirm-boss-button';
             confirmButton.textContent = "我的老大是他/她"; 
             confirmButton.disabled = true; 
             confirmButton.className = 'gold-button bg-gray-500 cursor-not-allowed text-white px-6 py-3 rounded-lg w-full mt-6 transition-all duration-200';
-            
             confirmButton.onclick = () => {
                  if (window.isAuthReady && window.currentUserId) {
                     goToNameInput();
@@ -683,10 +635,8 @@
                  }
             };
             controlsDiv.appendChild(confirmButton);
-
             const bosses = [1, 2, 3, 4, 5, 6, 7, 8, 9];
             const gridDiv = document.getElementById('boss-grid');
-
             bosses.forEach(id => {
                 const item = document.createElement('div');
                 item.className = 'boss-item relative cursor-pointer border-4 border-transparent rounded-lg overflow-hidden transition-all duration-200 hover:border-yellow-500';
@@ -698,7 +648,6 @@
                 `;
                 gridDiv.appendChild(item);
             });
-            
             function selectBoss(id) {
                 selectedBossId = id;
                 document.querySelectorAll('.boss-item').forEach(item => {
@@ -712,7 +661,6 @@
                         check.classList.remove('opacity-100');
                     }
                 });
-
                 if (window.isAuthReady) {
                     confirmButton.disabled = false;
                     confirmButton.classList.remove('bg-gray-500', 'cursor-not-allowed');
@@ -734,18 +682,15 @@
                 <p class="text-md text-gray-400 text-center">這是你獨一無二的身份，將用於紀錄你的通關順序。</p>
             `;
             
-            // --- 修正點：偵測重複代號邏輯 ---
             const submitName = async (name) => {
                 const trimmedName = name.trim();
                 if (trimmedName.length >= 2 && trimmedName.length <= 10) {
-                    // 顯示驗證中訊息
                     showMessage("正在驗證代號是否可用...", false);
                     
                     try {
                         const ranksRef = getPublicRanksCollectionRef();
                         if (!ranksRef) throw new Error("Database not ready");
 
-                        // 抓取所有資料進行內存比對 (Rule 2)
                         const querySnapshot = await fs.getDocs(ranksRef);
                         const isDuplicate = querySnapshot.docs.some(doc => doc.data().name === trimmedName);
 
@@ -894,16 +839,12 @@
             if (normalizedInput === CORRECT_CODE) {
                 showMessage("密碼正確！金庫鎖正在解開...", false);
                 
-                // 取「10分鐘扣掉剩餘時間 (含懲罰)」與「實際遊玩秒數」的最大值
                 const penaltyTimeTaken = INITIAL_TIME_SECONDS - Math.max(0, timeLeft);
                 const actualTimeElapsed = Math.floor((Date.now() - missionStartTime) / 1000);
                 completionTime = Math.max(penaltyTimeTaken, actualTimeElapsed); 
 
-                if (timeLeft <= 0) {
-                    setTimeout(() => goToLateSuccess(true), 2000);
-                } else {
-                    setTimeout(() => goToSuccess(false), 2000);
-                }
+                // 統一進入結算畫面，由結算邏輯決定顯示哪張圖片
+                setTimeout(() => handleMissionComplete(), 2000);
             } else {
                 timeLeft = Math.max(0, timeLeft - 30);
                 if (timeLeft <= 0) { stopTimer(); showMessage(`時間已用盡！`, true); updateTimer(); }
@@ -911,58 +852,66 @@
             }
         }
 
-        async function goToSuccess(isLate) {
+        async function handleMissionComplete() {
             currentState = GAME_STATE.SUCCESS;
-            bgm.pause(); successSound.play().catch(error => console.log(error));
-            stopTimer(); timerDisplay.classList.add('hidden'); clearScreen(); window.scrollTo(0, 0);
-            contentDiv.innerHTML = `
-                <div class="text-center py-10">
-                    <h2 class="text-3xl font-bold text-yellow-400 mb-4">正在計算您的排名...</h2>
-                    <p class="text-lg text-gray-400">正在等待伺服器確認您的通關紀錄。</p>
-                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-yellow-500 mx-auto mt-6"></div>
-                </div>
-            `;
-            const { rank, totalRecords, topTenRanks } = await recordCompletionAndShowRank(isLate);
-            document.body.className = 'min-h-screen flex items-center justify-center p-4 success-bg';
-            container.className = 'bg-yellow-100 text-gray-900 p-6 md:p-10 rounded-xl shadow-2xl max-w-lg w-full transition-all duration-500 border-4 border-yellow-700';
-            contentDiv.innerHTML = `
-                <div class="text-center">
-                    <h2 class="text-4xl md:text-5xl font-extrabold text-yellow-700 mt-4 animate-bounce">你成功打開金庫！</h2>
-                    <p class="text-xl font-bold mb-2">代號: <span class="text-red-600">${playerName}</span></p>
-                    <p class="text-2xl font-extrabold mb-4 text-red-700">耗時: ${completionTime} 秒</p>
-                    <p class="text-lg font-semibold mb-6 p-2 bg-yellow-200 rounded-lg shadow-md">🎉 今日第 <span class="text-red-700 font-extrabold">${rank}</span> 位通關玩家! (共 ${totalRecords} 筆紀錄)</p>
-                    <img src="SUCCESS_IMAGE.png" onerror="this.onerror=null; this.src='https://placehold.co/200x150/FFD700/000?text=金幣成功圖';" alt="金幣成功圖" class="mx-auto w-1/2 max-w-sm object-contain mb-4 shadow-lg">
-                    <p class="mt-6 text-xl">金山銀山就在眼前，你得手了！</p>
-                    <p class="mt-4 text-2xl font-bold p-3 bg-yellow-300 rounded-lg"><strong>請到簽到處出示這個畫面領取你的金幣！</strong></p>
-                    ${renderLeaderboard(topTenRanks)}
-                </div>
-            `;
-            controlsDiv.innerHTML = '';
-        }
+            bgm.pause();
+            stopTimer();
+            timerDisplay.classList.add('hidden');
+            clearScreen();
+            window.scrollTo(0, 0);
 
-        async function goToLateSuccess(isLate) {
-            currentState = GAME_STATE.SUCCESS; 
-            bgm.pause(); lateSound.play().catch(error => console.log(error));
-            stopTimer(); timerDisplay.classList.add('hidden'); clearScreen(); window.scrollTo(0, 0);
             contentDiv.innerHTML = `
                 <div class="text-center py-10">
-                    <h2 class="text-3xl font-bold text-yellow-400 mb-4">正在計算您的排名...</h2>
+                    <h2 class="text-3xl font-bold text-yellow-400 mb-4">正在回傳戰報並計算排名...</h2>
                     <p class="text-lg text-gray-400">正在等待伺服器確認您的通關紀錄。</p>
                     <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-yellow-500 mx-auto mt-6"></div>
                 </div>
             `;
-            const { rank, totalRecords, topTenRanks } = await recordCompletionAndShowRank(isLate);
+
+            // 這裡的 isLate 僅用於記錄到資料庫，不直接決定 UI
+            const isLateRecord = completionTime > INITIAL_TIME_SECONDS;
+            const { rank, totalRecords, topTenRanks } = await recordCompletionAndShowRank(isLateRecord);
+
+            // --- 核心邏輯修正：判斷顯示 SUCCESS 還是 LATE ---
+            // 條件：排名在前 50 名 (含) 且 結算時間在 600 秒 (含) 內
+            const isGrandSuccess = (rank !== 'Error' && rank <= 50) && (completionTime <= INITIAL_TIME_SECONDS);
+
+            if (isGrandSuccess) {
+                successSound.play().catch(e => console.log(e));
+            } else {
+                lateSound.play().catch(e => console.log(e));
+            }
+
             document.body.className = 'min-h-screen flex items-center justify-center p-4 success-bg';
             container.className = 'bg-yellow-100 text-gray-900 p-6 md:p-10 rounded-xl shadow-2xl max-w-lg w-full transition-all duration-500 border-4 border-yellow-700';
+
             contentDiv.innerHTML = `
                 <div class="text-center">
-                    <h2 class="text-4xl md:text-5xl font-extrabold text-yellow-700 mt-4 animate-bounce">你成功打開金庫！</h2>
-                    <p class="text-xl font-bold mb-2">代號: <span class="text-red-600">${playerName}</span></p>
-                    <p class="text-2xl font-extrabold mb-4 text-red-700">耗時: ${completionTime} 秒</p>
-                    <p class="text-lg font-semibold mb-6 p-2 bg-yellow-200 rounded-lg shadow-md">⏱️ 今日第 <span class="text-red-700 font-extrabold">${rank}</span> 位通關玩家! (共 ${totalRecords} 筆紀錄)</p>
-                    <img src="LATE_IMAGE.png" onerror="this.onerror=null; this.src='https://placehold.co/200x150/FFD700/000?text=金幣B圖';" alt="金幣B圖" class="mx-auto w-1/2 max-w-sm object-contain mb-4 shadow-lg">
-                    <p class="mt-6 text-xl">但是沒想到你來的太晚了，只剩下⋯⋯</p>
-                    <p class="mt-4 text-2xl font-bold p-3 bg-yellow-300 rounded-lg"><strong>請到簽到處出示這個畫面領取你的獎勵！</strong></p>
+                    <h2 class="text-4xl md:text-5xl font-extrabold text-yellow-700 mt-4 animate-bounce">
+                        ${isGrandSuccess ? '你成功打開金庫！' : '行動成功，但...'}
+                    </h2>
+                    <p class="text-xl font-bold mb-2">
+                        代號: <span class="text-red-600">${playerName}</span>
+                    </p>
+                    <p class="text-2xl font-extrabold mb-4 text-red-700">
+                        耗時: ${completionTime} 秒
+                    </p>
+                    <p class="text-lg font-semibold mb-6 p-2 bg-yellow-200 rounded-lg shadow-md">
+                        ${isGrandSuccess ? '🎉' : '⏱️'} 今日第 <span class="text-red-700 font-extrabold">${rank}</span> 位通關玩家! (共 ${totalRecords} 筆紀錄)
+                    </p>
+
+                    <img src="${isGrandSuccess ? 'SUCCESS_IMAGE.png' : 'LATE_IMAGE.png'}" 
+                         onerror="this.onerror=null; this.src='https://placehold.co/200x150/FFD700/000?text=${isGrandSuccess ? 'WIN' : 'LATE'}';"
+                         alt="任務結算圖" 
+                         class="mx-auto w-1/2 max-w-sm object-contain mb-4 shadow-lg"
+                    >
+                    
+                    <p class="mt-6 text-xl">
+                        ${isGrandSuccess ? '金山銀山就在眼前，你得手了！' : '沒想到你來的太晚，或者任務出了點差錯，只剩下⋯⋯'}
+                    </p>
+                    <p class="mt-4 text-2xl font-bold p-3 bg-yellow-300 rounded-lg">
+                        <strong>請到簽到處出示這個畫面領取你的獎勵！</strong>
+                    </p>
                     ${renderLeaderboard(topTenRanks)}
                 </div>
             `;
