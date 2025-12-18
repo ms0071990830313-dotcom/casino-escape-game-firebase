@@ -130,7 +130,7 @@
 </head>
 <body class="min-h-screen flex items-center justify-center p-4">
 
-    <!-- 背景音樂 (請確保此檔案名稱 Mission Impossible Theme (Full Theme).mp3 已在 GitHub 根目錄且名稱完全一致) -->
+    <!-- 背景音樂 -->
     <audio id="bgm" loop>
         <source src="Mission Impossible Theme (Full Theme).mp3" type="audio/mp3">
         您的瀏覽器不支持音頻播放。
@@ -357,7 +357,12 @@
             controlsDiv.appendChild(constContainer);
         }
         function revealHint() {
-            if (hintsRevealed >= 3) {
+            const HINTS = [
+                "提示 1: 看看守則第一條，標題的顏色是否藏著數字？",
+                "提示 2: 守則提到方向：上、下、左、右，分別對應刻度位置。",
+                "提示 3: 將所有發現的數字，依照守則末尾的字母順序排列。"
+            ];
+            if (hintsRevealed >= HINTS.length) {
                 showMessage("已經沒有更多提示了！", true);
                 return;
             }
@@ -372,11 +377,6 @@
                 updateTimer();
             }
             
-            const HINTS = [
-                "提示 1: 看看守則第一條，標題的顏色是否藏著數字？",
-                "提示 2: 守則提到方向：上、下、左、右，分別對應刻度位置。",
-                "提示 3: 將所有發現的數字，依照守則末尾的字母順序排列。"
-            ];
             const hintText = HINTS[hintsRevealed];
             const hintDiv = document.getElementById('hint-messages');
             
@@ -871,9 +871,18 @@
             const normalizedInput = input.trim();
             if (normalizedInput === CORRECT_CODE) {
                 showMessage("密碼正確！金庫鎖正在解開...", false);
-                completionTime = Math.floor((Date.now() - missionStartTime) / 1000); 
-                if (timeLeft <= 0) setTimeout(() => goToLateSuccess(true), 2000);
-                else setTimeout(() => goToSuccess(false), 2000);
+                
+                // --- 修正點：通關時間計算邏輯 ---
+                // 取「10分鐘扣掉剩餘時間 (含懲罰)」與「實際遊玩秒數」的最大值
+                const penaltyTimeTaken = INITIAL_TIME_SECONDS - Math.max(0, timeLeft);
+                const actualTimeElapsed = Math.floor((Date.now() - missionStartTime) / 1000);
+                completionTime = Math.max(penaltyTimeTaken, actualTimeElapsed); 
+
+                if (timeLeft <= 0) {
+                    setTimeout(() => goToLateSuccess(true), 2000);
+                } else {
+                    setTimeout(() => goToSuccess(false), 2000);
+                }
             } else {
                 timeLeft = Math.max(0, timeLeft - 30);
                 if (timeLeft <= 0) { stopTimer(); showMessage(`時間已用盡！`, true); updateTimer(); }
