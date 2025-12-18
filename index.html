@@ -733,16 +733,38 @@
                 <h2 class="text-2xl font-bold text-yellow-400 text-center mb-6">告訴老大你的代號</h2>
                 <p class="text-md text-gray-400 text-center">這是你獨一無二的身份，將用於紀錄你的通關順序。</p>
             `;
-            const submitName = (name) => {
+            
+            // --- 修正點：偵測重複代號邏輯 ---
+            const submitName = async (name) => {
                 const trimmedName = name.trim();
                 if (trimmedName.length >= 2 && trimmedName.length <= 10) {
-                    playerName = trimmedName;
-                    showMessage(`代號：${playerName}，確認！`, false);
-                    setTimeout(goToMissionDialogue, 1500); 
+                    // 顯示驗證中訊息
+                    showMessage("正在驗證代號是否可用...", false);
+                    
+                    try {
+                        const ranksRef = getPublicRanksCollectionRef();
+                        if (!ranksRef) throw new Error("Database not ready");
+
+                        // 抓取所有資料進行內存比對 (Rule 2)
+                        const querySnapshot = await fs.getDocs(ranksRef);
+                        const isDuplicate = querySnapshot.docs.some(doc => doc.data().name === trimmedName);
+
+                        if (isDuplicate) {
+                            showMessage("你的代號已被使用，請更換一個。", true);
+                        } else {
+                            playerName = trimmedName;
+                            showMessage(`代號：${playerName}，確認！`, false);
+                            setTimeout(goToMissionDialogue, 1500); 
+                        }
+                    } catch (e) {
+                        console.error("驗證失敗:", e);
+                        showMessage("連線檢查失敗，請重試。", true);
+                    }
                 } else {
                     showMessage("代號長度需在 2 到 10 個字元之間。", true);
                 }
             };
+
             renderInput("請輸入你的黑幫化名（2-10個字）", "確認代號", submitName, 'codename-input', 10);
             document.getElementById('codename-input').focus();
         }
@@ -872,7 +894,6 @@
             if (normalizedInput === CORRECT_CODE) {
                 showMessage("密碼正確！金庫鎖正在解開...", false);
                 
-                // --- 修正點：通關時間計算邏輯 ---
                 // 取「10分鐘扣掉剩餘時間 (含懲罰)」與「實際遊玩秒數」的最大值
                 const penaltyTimeTaken = INITIAL_TIME_SECONDS - Math.max(0, timeLeft);
                 const actualTimeElapsed = Math.floor((Date.now() - missionStartTime) / 1000);
