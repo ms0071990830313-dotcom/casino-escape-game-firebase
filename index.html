@@ -443,10 +443,10 @@
                 const qualifiers = sortedByEntry.filter(d => d.completionTime < INITIAL_TIME_SECONDS);
                 const successRank = qualifiers.findIndex(d => d.id === docRef.id) + 1;
 
-                // 獲取 Top 10 排行榜 (按 completionTime 排序)
+                // 獲取 Top 50 排行榜 (按 completionTime 排序)
                 const topTenRanks = [...allTodayDocs]
                     .sort((a, b) => a.completionTime - b.completionTime)
-                    .slice(0, 10)
+                    .slice(0, 50)
                     .map((data, index) => {
                         return {
                             rank: index + 1,
