@@ -135,7 +135,7 @@
 </head>
 <body class="min-h-screen flex items-center justify-center p-4">
 
-    <!-- 背景音樂 (請確保此檔案名稱 Mission Impossible Theme (Full Theme).mp3 已在 GitHub 根目錄且名稱完全一致) -->
+    <!-- 背景音樂 -->
     <audio id="bgm" loop>
         <source src="Mission Impossible Theme (Full Theme).mp3" type="audio/mp3">
         您的瀏覽器不支持音頻播放。
@@ -349,9 +349,9 @@
 
         function revealHint() {
             const HINTS = [
-                "提示 1: 看看守則第一條，標題的顏色是否藏著數字？",
-                "提示 2: 守則提到方向：上、下、左、右，分別對應刻度位置。",
-                "提示 3: 將所有發現的數字，依照守則末尾的字母順序排列。"
+                "提示 1: 你有發現金庫上面的提示「老大才能碰」，老大在賭場裡的花色通常是代表『黑桃』，但是金庫守則上似乎不只有一種顏色的『黑桃』⋯⋯",
+                "提示 2: 金庫守則上似乎有很多不同顏色的筆畫，仔細看看好像是數字⋯⋯也許這跟密碼有什麼關係？",
+                "金庫密碼是三位數，紅色的黑桃也是三個⋯⋯剩下就是每個黑桃分別代表哪個數字了⋯⋯"
             ];
             if (hintsRevealed >= HINTS.length) {
                 showMessage("已經沒有更多提示了！", true);
@@ -791,11 +791,19 @@
                 setTimeout(() => { window.scrollTo(0, 0); goToClueHunt(); }, 2500);
                 return;
             }
-            let hintMessage = "這個位數不正確。";
-            if (isNaN(digitInput) || digitInput === 0) hintMessage = "請輸入一個數字。你需要找到金庫寶箱，上面應該有密碼鎖。";
-            else if (digitInput > 4) hintMessage = `這個數字太大了。再仔細看看，這個鎖的結構似乎很簡單，只靠幾個轉盤運作。`;
-            else if (digitInput === 2) hintMessage = `只有兩位數嗎？請再靠近一點數數看，密碼轉盤是不是有三個？`;
-            else if (digitInput === 4) hintMessage = `不對，它不是四位數的。仔細數數，密碼鎖只有三個可以轉動的盤。`;
+            // 修改文字：預設錯誤提示
+            let hintMessage = "這個數字不正確，再嘗試看看";
+            if (isNaN(digitInput) || digitInput === 0) {
+                hintMessage = "請輸入一個數字。你需要找到金庫寶箱，上面應該有密碼鎖。";
+            } else if (digitInput > 4) {
+                hintMessage = `這個數字太大了。再仔細看看，這個鎖的結構似乎很簡單，只靠幾個轉盤運作。`;
+            } else if (digitInput === 2) {
+                // 修改文字：輸入 2 的提示
+                hintMessage = `只有兩位數嗎？請再靠近一點數數看，是不是有⋯⋯？`;
+            } else if (digitInput === 4) {
+                // 修改文字：輸入 4 的提示
+                hintMessage = `不對，它不是四位數的. 仔細數數，密碼鎖上有幾個可以轉動的.`;
+            }
             showMessage(hintMessage, true);
         }
 
@@ -811,7 +819,8 @@
                 <p class="text-yellow-400"><strong>【行動指示：第二步】</strong></p>
                 <p>環顧四周，尋找周邊物品，什麼東西看起來像是在提供密碼的線索？</p>
             `;
-            renderInput("請輸入你發現的線索名稱 (例如：紙條、便籤)", "確認線索", checkClue, 'clue-input');
+            // 修改文字：Placeholder「請輸入你發現的線索名稱全名 」
+            renderInput("請輸入你發現的線索名稱全名 ", "確認線索", checkClue, 'clue-input');
         }
 
         function checkClue(input) {
@@ -820,7 +829,8 @@
                 showMessage("線索確認！這就是我們要找的！", false);
                 setTimeout(() => { window.scrollTo(0, 0); goToCodeEntry(); }, 1500);
             } else {
-                let hintMessage = "這個不是我們要找的。";
+                // 修改文字：錯誤時的提示「再找找看，應該不會放在太遠的地方」
+                let hintMessage = "再找找看，應該不會放在太遠的地方";
                 if (input.includes("規則") || input.includes("守則")) hintMessage = "很接近了！試試看完整的名稱！";
                 showMessage(hintMessage, true);
             }
