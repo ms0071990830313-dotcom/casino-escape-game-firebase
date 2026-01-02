@@ -12,6 +12,7 @@
         body {
             font-family: 'Noto Sans TC', 'Inter', sans-serif;
             background-color: #1a1a2e; /* 深色背景, 符合黑幫主題 */
+            overflow-x: hidden;
         }
         .text-shadow-custom {
             text-shadow: 0 0 5px rgba(255, 215, 0, 0.5), 0 0 10px rgba(255, 215, 0, 0.3);
@@ -86,7 +87,7 @@
         .leaderboard-table td {
             padding: 8px;
         }
-        /* 排行榜捲軸樣式 */
+        /* 排行榜捲軸自定義樣式 */
         .custom-scrollbar::-webkit-scrollbar {
             width: 6px;
         }
@@ -97,6 +98,47 @@
         .custom-scrollbar::-webkit-scrollbar-thumb {
             background: #eab308;
             border-radius: 10px;
+        }
+
+        /* --- 3D 啟動頁樣式 --- */
+        #launch-page {
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background-color: #0f0f1b; /* 極深藍色 */
+            perspective: 1200px; /* 3D 透視深度 */
+            cursor: pointer;
+            transition: opacity 1s ease-out;
+        }
+        #launch-logo-container {
+            transform-style: preserve-3d;
+            animation: rotate3D 8s infinite linear;
+        }
+        #launch-logo {
+            width: 70vw;
+            max-width: 450px;
+            filter: drop-shadow(0 0 20px rgba(255, 215, 0, 0.4));
+        }
+        @keyframes rotate3D {
+            0% { transform: rotateY(0deg) rotateX(5deg); }
+            100% { transform: rotateY(360deg) rotateX(5deg); }
+        }
+        .tap-to-start {
+            margin-top: 3rem;
+            color: #fbbf24;
+            font-weight: bold;
+            letter-spacing: 0.2em;
+            animation: blink 2s infinite;
+            text-transform: uppercase;
+            font-size: 1.1rem;
+        }
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
         }
     </style>
     
@@ -140,7 +182,16 @@
 </head>
 <body class="min-h-screen flex items-center justify-center p-4">
 
-    <!-- 背景音樂與音效 -->
+    <!-- 3D 啟動頁面 -->
+    <div id="launch-page">
+        <div id="launch-logo-container">
+            <!-- 啟動頁面的遊戲 Logo：已更改為 name.png -->
+            <img id="launch-logo" src="name.png" onerror="this.onerror=null; this.src='https://placehold.co/400x400/29294F/FFF?text=黑色追緝令';" alt="遊戲標題圖">
+        </div>
+        <div class="tap-to-start">點擊螢幕開始任務</div>
+    </div>
+
+    <!-- 音效資源 -->
     <audio id="bgm" loop>
         <source src="Mission Impossible Theme (Full Theme).mp3" type="audio/mp3">
     </audio>
@@ -151,6 +202,7 @@
         <source src="LATE_sound.mp4" type="audio/mp4">
     </audio>
 
+    <!-- 遊戲主容器 -->
     <div id="game-container" class="bg-gray-800 text-white p-6 md:p-10 rounded-xl shadow-2xl max-w-lg w-full transition-all duration-500">
         <h1 class="text-3xl md:text-4xl font-bold text-center mb-6 text-yellow-400 text-shadow-custom">
             黑色追緝令：賭場風雲
@@ -232,13 +284,31 @@
                 setTimeout(initGame, 1000);
                 return;
             }
-            goToInitialImageScreen();
+            
+            // 優先顯示 3D 啟動頁面
+            showLaunchPage();
+        }
+
+        // --- 處理啟動頁面功能 ---
+        function showLaunchPage() {
+            const launchPage = document.getElementById('launch-page');
+            launchPage.onclick = () => {
+                // 藉由使用者點擊動作，嘗試背景音樂播放（解決瀏覽器限制）
+                startBGM(); 
+                
+                // 啟動淡出效果
+                launchPage.style.opacity = "0";
+                setTimeout(() => {
+                    launchPage.style.display = "none";
+                    goToInitialImageScreen(); // 進入原本的遊戲檢查與 Firebase 登入畫面
+                }, 1000);
+            };
         }
         
         function startBGM() {
             if (bgm && bgm.paused) {
                 bgm.volume = 0.5;
-                bgm.play().catch(error => console.log("BGM 播放失敗。"));
+                bgm.play().catch(error => console.log("BGM 播放等待再次觸發。"));
             }
         }
 
@@ -407,7 +477,6 @@
                 const qualifiers = sortedByEntry.filter(d => d.completionTime < INITIAL_TIME_SECONDS);
                 const successRank = qualifiers.findIndex(d => d.id === docRef.id) + 1;
 
-                // 擴充為顯示前 50 名
                 const topTenRanks = [...allTodayDocs]
                     .sort((a, b) => a.completionTime - b.completionTime)
                     .slice(0, 50)
