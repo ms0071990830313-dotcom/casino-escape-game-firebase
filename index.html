@@ -671,7 +671,7 @@
             contentDiv.innerHTML += renderLeaderboard(topTenRanks);
         }
 
-        // --- 📸 分享圖片產生邏輯 (改名為 通關排行榜 且格式為 X / Y) ---
+        // --- 📸 分享圖片產生邏輯 ---
         let lastGeneratedBlob = null;
 
         async function generateShareImage(tRank, total) {
@@ -690,12 +690,13 @@
             };
 
             bgImg.onerror = () => {
+                // 測試模擬背景
                 ctx.fillStyle = "#1a1a2e";
                 ctx.fillRect(0, 0, 1080, 1920);
-                // 標示區間 193-960px
+                // 更新後測試輔助：畫出 362px - 960px 區間
                 ctx.strokeStyle = "rgba(255, 215, 0, 0.3)";
                 ctx.lineWidth = 2;
-                ctx.strokeRect(0, 193, 1080, 767);
+                ctx.strokeRect(0, 362, 1080, 598); // 960 - 362 = 598
                 drawShareCanvasContent(ctx, null, tRank, total, canvas);
             };
         }
@@ -705,21 +706,21 @@
 
             ctx.textAlign = "center";
             
-            // 1. 代號
+            // 1. 代號 (靠近區間頂部)
             ctx.fillStyle = "#FFFFFF";
             ctx.font = "bold 90px 'Noto Sans TC'";
-            ctx.fillText(playerName, 540, 380);
+            ctx.fillText(playerName, 540, 500);
 
-            // 2. 耗時
-            ctx.fillStyle = "#fbbf24";
-            ctx.font = "bold 130px 'Inter'";
-            ctx.fillText(`${completionTime} SECS`, 540, 600);
+            // 2. 耗時 (區間中心，前面加上 通關時間：)
+            ctx.fillStyle = "#fbbf24"; 
+            ctx.font = "bold 100px 'Inter'"; // 縮小一點點以容納更多文字
+            ctx.fillText(`通關時：${completionTime} SECS`, 540, 680);
 
-            // 3. 通關排行榜 (X / Y)
+            // 3. 通關排行榜 (區間底部，格式 X / Y)
             ctx.fillStyle = "#FFFFFF";
             ctx.font = "bold 70px 'Noto Sans TC'";
             const rankText = (tRank && tRank !== 'N/A' && total !== 'N/A') ? `通關排行榜：${tRank} / ${total}` : "任務通關成功！";
-            ctx.fillText(rankText, 540, 820);
+            ctx.fillText(rankText, 540, 860);
 
             const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
             const modal = document.getElementById('image-modal');
@@ -742,7 +743,7 @@
                 await navigator.share({
                     files: [file],
                     title: '黑色追緝令：戰果回報',
-                    text: `我以代號【${playerName}】完成任務，今日耗時排名第 ${completionTime} 秒！`
+                    text: `我以代號【${playerName}】完成任務！`
                 });
             } catch (err) {
                 console.log("分享取消");
