@@ -782,23 +782,26 @@
             ctx.textAlign = "center";
             const maxTextWidth = 880; // 左右各 100px 距離
             
-            // 重新分佈文字，維持相等垂直間距 (Gap: 150px)
-            // L1: 430px, L2: 580px, L3: 730px
+            // 重新分佈文字，維持相等垂直間距 (Gap: 175px)
+            // L1 從 430px 上移 50px -> 380px
+            // L2 = 380 + 175 = 555px
+            // L3 = 555 + 175 = 730px
             
-            const shareFont = "bold 85px 'Special Elite', 'Noto Serif TC', serif";
+            // 設定字體：第一、二行縮小 10% (原本 85px -> 77px)
+            const shareFont = "bold 77px 'Special Elite', 'Noto Serif TC', serif";
             const shareFontSmall = "bold 65px 'Special Elite', 'Noto Serif TC', serif";
             
             // 1. 特工代號
             ctx.fillStyle = "#FFFFFF";
             ctx.font = shareFont;
-            ctx.fillText(`特工代號：${playerName}`, 540, 430, maxTextWidth); 
+            ctx.fillText(`特工代號：${playerName}`, 540, 380, maxTextWidth); 
 
-            // 2. 金庫破解耗時 (間隔 150px)
+            // 2. 金庫破解耗時
             ctx.fillStyle = "#fbbf24"; 
             ctx.font = shareFont; 
-            ctx.fillText(`金庫破解耗時：${completionTime} 秒`, 540, 580, maxTextWidth);
+            ctx.fillText(`金庫破解耗時：${completionTime} 秒`, 540, 555, maxTextWidth);
 
-            // 3. 最速懸賞榜 (間隔 150px)
+            // 3. 最速懸賞榜
             ctx.fillStyle = "#FFFFFF";
             ctx.font = shareFontSmall;
             const rankDisplay = (tRank && tRank !== 'N/A' && total !== 'N/A') ? `No. ${tRank} / ${total}` : "MISSION SUCCESS";
