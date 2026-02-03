@@ -603,7 +603,7 @@
 
         function goToClueHunt() {
             currentState = GAME_STATE.CLUE_HUNT; clearScreen(); window.scrollTo(0, 0);
-            contentDiv.innerHTML = `<p>你確認了，金庫鎖需要<strong>三位數密碼</strong>才能打開。同時，你發現<strong>金庫上有一個提示</strong>寫著什麼⋯⋯。</p><p>金庫密碼每天都會換，但你事前已經調查過，賭場主人記性學差，<strong>相關的提示一定就在金庫附近</strong>。</p><hr class="my-4 border-gray-600"><p class="text-yellow-400"><strong>【行動指示：第二步】</strong></p><p>環顧四周，尋找周邊物品，什麼東西看起來像是在提供密碼的線索？</p>`;
+            contentDiv.innerHTML = `<p>你確認了，金庫鎖需要<strong>三位數密碼</strong>才能打開。同時，你發現<strong>金庫上有一個提示</strong>寫著什麼⋯⋯。</p><p>金庫密碼每天都會換，但你事前已經調查過，賭場主人記性學差，<strong>相關的提示就在金庫附近</strong>。</p><hr class="my-4 border-gray-600"><p class="text-yellow-400"><strong>【行動指示：第二步】</strong></p><p>環顧四周，尋找周邊物品，什麼東西看起來像是在提供密碼的線索？</p>`;
             renderInput("請輸入你發現的線索名稱全名 ", "確認線索", checkClue, 'clue-input');
         }
 
@@ -758,23 +758,23 @@
             ctx.textAlign = "center";
             const maxTextWidth = 880; // 1080 - 100 - 100 = 880px 保留左右各 100px 距離
             
-            // 重新分佈文字在 230px 到 870px 區間
+            // 重新分佈文字，精確填補 230px 到 700px 區間，避開 780px 以後的圖案
             
-            // 1. 代號 (靠近 230px 邊界，加入前綴)
+            // 1. 代號 (設為 300px，頂部約落在 230px 附近)
             ctx.fillStyle = "#FFFFFF";
             ctx.font = "bold 90px 'Noto Sans TC'";
-            ctx.fillText(`成員代號：${playerName}`, 540, 380, maxTextWidth); 
+            ctx.fillText(`成員代號：${playerName}`, 540, 300, maxTextWidth); 
 
-            // 2. 耗時 (中間位置)
+            // 2. 耗時 (約在 500px)
             ctx.fillStyle = "#fbbf24"; 
             ctx.font = "bold 100px 'Inter'"; 
-            ctx.fillText(`通關時間：${completionTime} SECS`, 540, 580, maxTextWidth);
+            ctx.fillText(`通關時間：${completionTime} SECS`, 540, 500, maxTextWidth);
 
-            // 3. 通關排行榜 (靠近 870px 邊界)
+            // 3. 通關排行榜 (設為 700px，確保整體低於 780px)
             ctx.fillStyle = "#FFFFFF";
             ctx.font = "bold 70px 'Noto Sans TC'";
             const rankText = (tRank && tRank !== 'N/A' && total !== 'N/A') ? `通關排行榜：${tRank} / ${total}` : "任務通關成功！";
-            ctx.fillText(rankText, 540, 780, maxTextWidth);
+            ctx.fillText(rankText, 540, 700, maxTextWidth);
 
             const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
             const modal = document.getElementById('image-modal');
