@@ -120,7 +120,6 @@
             justify-content: center;
             background-color: #0f0f1b;
             perspective: 1200px;
-            cursor: pointer;
             transition: opacity 1s ease-out;
         }
         #launch-logo-container {
@@ -137,13 +136,14 @@
             100% { transform: rotateY(360deg) rotateX(5deg); }
         }
         .tap-to-start {
-            margin-top: 3rem;
+            margin-top: 1.5rem;
             color: #fbbf24;
             font-weight: bold;
             letter-spacing: 0.2em;
             animation: blink 2s infinite;
             text-transform: uppercase;
             font-size: 1.1rem;
+            cursor: pointer;
         }
         @keyframes blink {
             0%, 100% { opacity: 1; }
@@ -217,7 +217,20 @@
         <div id="launch-logo-container">
             <img id="launch-logo" src="name.png" onerror="this.onerror=null; this.src='https://placehold.co/400x400/29294F/FFF?text=黑色追緝令';" alt="遊戲標題圖">
         </div>
-        <div class="tap-to-start">點擊螢幕開始任務</div>
+        
+        <!-- 前置確認勾選框 -->
+        <div id="launch-check-area" class="mt-8 space-y-3 text-left text-gray-200 bg-black/40 p-4 rounded-lg border border-yellow-500/30">
+            <label class="flex items-center space-x-3 cursor-pointer">
+                <input type="checkbox" id="launch-check-network" class="form-checkbox h-5 w-5 text-yellow-500 bg-gray-700 border-gray-500 rounded focus:ring-0">
+                <span class="text-sm md:text-base">請確保網路穩定</span>
+            </label>
+            <label class="flex items-center space-x-3 cursor-pointer">
+                <input type="checkbox" id="launch-check-volume" class="form-checkbox h-5 w-5 text-yellow-500 bg-gray-700 border-gray-500 rounded focus:ring-0">
+                <span class="text-sm md:text-base">請打開遊戲音量</span>
+            </label>
+        </div>
+
+        <div class="tap-to-start" id="tap-to-start-btn">點擊螢幕開始任務</div>
     </div>
 
     <!-- 分享圖片彈窗 (Modal) -->
@@ -238,10 +251,13 @@
         <source src="Mission Impossible Theme (Full Theme).mp3" type="audio/mp3">
     </audio>
     <audio id="success-sound">
-        <source src="SUCCESS_Sound.mp4" type="audio/mp4">
+        <source src="SUCCESS_Sound.mp3" type="audio/mp3">
     </audio>
     <audio id="late-sound">
         <source src="LATE_sound.mp4" type="audio/mp4">
+    </audio>
+    <audio id="gun-loading-sound">
+        <source src="gun-loading.mp3" type="audio/mp3">
     </audio>
 
     <div id="game-container" class="bg-gray-800 text-white p-6 md:p-10 rounded-xl shadow-2xl max-w-lg w-full transition-all duration-500">
@@ -288,7 +304,7 @@
         let currentDialogueStep = 0; 
         let currentSuccessRank = 'N/A';
         
-        let container, contentDiv, controlsDiv, messageArea, timerDisplay, bgm, successSound, lateSound;
+        let container, contentDiv, controlsDiv, messageArea, timerDisplay, bgm, successSound, lateSound, gunLoadingSound;
 
         const DIALOGUE_STEPS = (name) => [
             { speaker: 'BOSS', text: `<span class="text-red-400">${name}</span>你來啦⋯⋯`, buttonText: "繼續" },
@@ -316,8 +332,9 @@
             bgm = document.getElementById('bgm');
             successSound = document.getElementById('success-sound');
             lateSound = document.getElementById('late-sound');
+            gunLoadingSound = document.getElementById('gun-loading-sound');
 
-            // 修正：立即綁定啟動頁點擊事件
+            // 立即綁定啟動頁點擊事件
             showLaunchPage();
             
             db = window.db;
@@ -325,7 +342,6 @@
             APP_ID = window.APP_ID;
             fs = window.fs;
 
-            // 這裡是 Firebase 的檢查迴圈，但不應影響啟動頁點擊
             if (!db || !auth || !APP_ID || !fs) {
                 setTimeout(initGame, 1000);
                 return;
@@ -334,9 +350,29 @@
 
         function showLaunchPage() {
             const launchPage = document.getElementById('launch-page');
-            if (!launchPage || launchPage.onclick) return; // 確保只綁定一次
-            launchPage.onclick = () => {
-                startBGM(); 
+            if (!launchPage) return;
+            
+            launchPage.onclick = (e) => {
+                // 如果點擊的是勾選框或標籤文字，不執行開始動作
+                if (e.target.type === 'checkbox' || e.target.tagName === 'LABEL' || e.target.tagName === 'SPAN') return;
+
+                const isReady = document.getElementById('launch-check-network').checked && 
+                                document.getElementById('launch-check-volume').checked;
+
+                if (!isReady) {
+                    const btn = document.getElementById('tap-to-start-btn');
+                    btn.textContent = "請勾選上方確認項！";
+                    btn.classList.add('text-red-500');
+                    setTimeout(() => {
+                        btn.textContent = "點擊螢幕開始任務";
+                        btn.classList.remove('text-red-500');
+                    }, 2000);
+                    return;
+                }
+
+                // 播放槍聲效
+                if (gunLoadingSound) gunLoadingSound.play().catch(e => console.log(e));
+
                 launchPage.style.opacity = "0";
                 setTimeout(() => {
                     launchPage.style.display = "none";
@@ -435,7 +471,8 @@
             const HINTS = [
                 "提示 1: 你有發現金庫上面的提示「老大才能碰」，老大在賭場裡的花色通常是代表『黑桃』，但是金庫守則上似乎不只有一種顏色的『黑桃』⋯⋯",
                 "提示 2: 金庫守則上似乎有很多不同顏色的筆畫，仔細看看好像是數字⋯⋯也許這跟密碼有什麼關係？",
-                "金庫密碼是三位數，紅色的黑桃也是三個⋯⋯剩下就是每個黑桃分別代表哪個數字了⋯⋯"
+                "提示 3: 金庫密碼是三位數，紅色的黑桃也是三個⋯⋯剩下就是每個黑桃分別代表哪個數字了⋯⋯",
+                "提示 4: 三個紅色的黑桃中間似乎都有數字，會不會跟後面的密碼有關係呢……"
             ];
             if (hintsRevealed >= HINTS.length) {
                 showMessage("已經沒有更多提示了！", true);
@@ -533,22 +570,16 @@
             clearScreen(); stopTimer(); timerDisplay.classList.add('hidden');
             document.body.className = 'min-h-screen flex items-center justify-center p-4 bg-gray-900';
             contentDiv.innerHTML = `<div class="text-center space-y-6"><p class="text-lg text-gray-300">一場秘密行動即將展開...</p><img src="cover.jpg" onerror="this.onerror=null; this.src='https://placehold.co/400x200/29294F/FFF?text=起始畫面圖片';" class="mx-auto w-full max-w-sm rounded-lg shadow-xl border-2 border-yellow-500 object-cover"></div>`;
-            const checkboxArea = document.createElement('div');
-            checkboxArea.className = 'mt-6 space-y-3 text-left text-gray-200';
-            checkboxArea.innerHTML = `<label class="flex items-center space-x-3 cursor-pointer"><input type="checkbox" id="check-network" class="form-checkbox h-5 w-5 text-yellow-500 bg-gray-700 border-gray-500 rounded focus:ring-0"><span>請確保網路穩定</span></label><label class="flex items-center space-x-3 cursor-pointer"><input type="checkbox" id="check-volume" class="form-checkbox h-5 w-5 text-yellow-500 bg-gray-700 border-gray-500 rounded focus:ring-0"><span>請打開遊戲音量</span></label>`;
-            controlsDiv.appendChild(checkboxArea);
+            
             const initialButton = renderButton("進入秘密任務", () => {
-                if (!initialButton.disabled) { if (window.auth && !window.auth.currentUser) fs.signInAnonymously(auth); goToBossSelection(); }
-                else showMessage("請確保上方兩項皆已確認", true);
+                // 播放槍聲效
+                if (gunLoadingSound) gunLoadingSound.play().catch(e => console.log(e));
+                startBGM(); 
+                if (window.auth && !window.auth.currentUser) fs.signInAnonymously(auth); 
+                goToBossSelection();
             }, 'initial-start-button');
-            initialButton.disabled = true; initialButton.className = 'gold-button bg-gray-500 cursor-not-allowed text-white px-6 py-3 rounded-lg w-full mt-6';
-            const checkPre = () => {
-                const isReady = document.getElementById('check-network').checked && document.getElementById('check-volume').checked;
-                initialButton.disabled = !isReady;
-                initialButton.className = isReady ? 'gold-button bg-yellow-500 hover:bg-yellow-600 text-gray-900 px-6 py-3 rounded-lg w-full mt-6' : 'gold-button bg-gray-500 cursor-not-allowed text-white px-6 py-3 rounded-lg w-full mt-6';
-            };
-            document.getElementById('check-network').addEventListener('change', checkPre);
-            document.getElementById('check-volume').addEventListener('change', checkPre);
+            
+            initialButton.className = 'gold-button bg-yellow-500 hover:bg-yellow-600 text-gray-900 px-6 py-3 rounded-lg w-full mt-6';
         }
 
         function goToBossSelection() {
@@ -590,7 +621,7 @@
         }
 
         function goToMissionDialogue() {
-            currentState = GAME_STATE.START; clearScreen(); stopTimer(); hintsRevealed = 0; timerDisplay.classList.add('hidden'); startBGM(); 
+            currentState = GAME_STATE.START; clearScreen(); stopTimer(); hintsRevealed = 0; timerDisplay.classList.add('hidden');
             contentDiv.innerHTML = `<div class="text-center mb-6"><img src="boss_${selectedBossId}.png" onerror="this.onerror=null; this.src='https://placehold.co/120x120/3A3A3A/FFF?text=BOSS';" class="mx-auto w-32 h-32 object-cover rounded-full shadow-lg border-4 border-red-500"></div><div id="dialogue-content-area" class="space-y-4"></div>`;
             currentDialogueStep = 0; displayNextDialogue();
         }
@@ -624,12 +655,16 @@
         }
 
         function checkClue(input) {
-            if (input.trim().replace(/\s/g, '').toLowerCase() === CORRECT_CLUE.toLowerCase()) {
-                showMessage("線索確認！這就是我們要找的！"); setTimeout(() => goToCodeEntry(), 1500);
+            const val = input.trim().replace(/\s/g, '').toLowerCase();
+            if (val === CORRECT_CLUE.toLowerCase()) {
+                showMessage("線索確認！這就是我們要找的！");
+                setTimeout(() => goToCodeEntry(), 1500);
+            } else if (val.includes("三口品") || val.includes("核心價值觀")) {
+                showMessage("三口品也愛你但是答案不是這個", true);
+            } else if (val.includes("金庫") || val.includes("守則")) {
+                showMessage("很接近了！試試看完整的名稱！", true);
             } else {
-                let hintMessage = "再找找看，應該不會放在太遠的地方";
-                if (input.includes("規則") || input.includes("守則")) hintMessage = "很接近了！試試看完整的名稱！";
-                showMessage(hintMessage, true);
+                showMessage("再找找看，應該不會放在太遠的地方", true);
             }
         }
 
@@ -637,7 +672,7 @@
             currentState = GAME_STATE.CODE_ENTRY; clearScreen(); window.scrollTo(0, 0);
             contentDiv.innerHTML = `<p>很好，你已經掌握了關鍵線索：<strong>【金庫守則】</strong>。</p><p>結合你剛才在金庫鎖上發現的提示，現在是時候破解三位數密碼了！</p><hr class="my-4 border-gray-600"><p class="text-yellow-400"><strong>【行動指示：第三步】</strong></p><p>根據守則內容和提示，推算出三位密碼。金庫裡的金幣等你！</p>`;
             const hintSection = document.createElement('div'); hintSection.className = 'mt-6 p-4 bg-gray-700 rounded-lg shadow-inner';
-            hintSection.innerHTML = `<h3 class="text-xl font-bold text-red-400 mb-2 flex items-center"><span class="text-3xl mr-2">💡</span><span>3個提示</span></h3><p class="text-sm text-red-300 mb-3">時間歸零仍可打開金庫，但是可能會發生⋯⋯</p><div id="hint-messages" class="space-y-2"></div>`;
+            hintSection.innerHTML = `<h3 class="text-xl font-bold text-red-400 mb-2 flex items-center"><span class="text-3xl mr-2">💡</span><span>4個提示</span></h3><p class="text-sm text-red-300 mb-3">時間歸零仍可打開金庫，但是可能會發生⋯⋯</p><div id="hint-messages" class="space-y-2"></div>`;
             const hintButton = document.createElement('button'); hintButton.id = 'reveal-hint-button'; hintButton.textContent = "每個提示扣除 60秒"; hintButton.className = 'gold-button bg-red-500 hover:bg-red-600 text-white px-6 py-3 rounded-lg w-full mt-4';
             hintButton.onclick = revealHint; hintSection.appendChild(hintButton); controlsDiv.appendChild(hintSection);
             renderInput("每輸錯一次扣除30秒", "解鎖金庫！", (v, btn) => {
@@ -679,7 +714,7 @@
             let finalHtml = `
                 <div class="text-center">
                     <h2 class="text-4xl md:text-5xl font-extrabold text-yellow-700 mt-4 animate-bounce">你成功打開金庫！</h2>
-                    <p class="text-xl font-bold mb-2">代號: <span class="text-red-600">${playerName}</span></p>
+                    <p class="text-xl font-bold mb-2">特工代號: <span class="text-red-600">${playerName}</span></p>
                     <p class="text-2xl font-extrabold mb-4 text-red-700">耗時: ${completionTime} 秒</p>
                     <div class="bg-yellow-200 p-3 rounded-lg shadow-md mb-6">
                         <p class="text-xl font-extrabold text-black mb-1">🎉通關成功順位：第 ${successRank} 名 / 50 名</p>
@@ -715,7 +750,7 @@
             let finalHtml = `
                 <div class="text-center">
                     <h2 class="text-4xl md:text-5 font-extrabold text-yellow-700 mt-4 animate-bounce">你成功打開金庫！</h2>
-                    <p class="text-xl font-bold mb-2">代號: <span class="text-red-600">${playerName}</span></p>
+                    <p class="text-xl font-bold mb-2">特工代號: <span class="text-red-600">${playerName}</span></p>
                     <p class="text-2xl font-extrabold mb-4 text-red-700">耗時: ${completionTime} 秒</p>
                     <div class="bg-yellow-200 p-3 rounded-lg shadow-md mb-6">
                         <p class="text-xl font-extrabold text-black mb-1">${successRank > 0 && successRank <= 50 ? `🎉通關成功順位：第 ${successRank} 名 / 50 名` : `⏱️成功通關！但任務逾時`}</p>
