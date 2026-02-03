@@ -6,9 +6,10 @@
     <title>黑色追緝令：賭場風雲</title>
     <!-- 載入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=Noto+Sans+TC:wght@400;700&family=Special+Elite&display=swap" rel="stylesheet">
+    <!-- 載入 Special Elite (英文) 與 Noto Serif TC (中文宋體) -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=Noto+Sans+TC:wght@400;700&family=Noto+Serif+TC:wght@700&family=Special+Elite&display=swap" rel="stylesheet">
     <style>
-        /* 使用 Inter 和 Noto Sans TC 確保中英文字體美觀 */
+        /* 使用 Inter 和 Noto Sans TC 確保介面中英文字體美觀 */
         body {
             font-family: 'Noto Sans TC', 'Inter', sans-serif;
             background-color: #1a1a2e; /* 深色背景, 符合黑幫主題 */
@@ -16,7 +17,7 @@
         }
         /* 強制載入字體的小技巧，確保 Canvas 能抓到 */
         .font-preload {
-            font-family: 'Special Elite';
+            font-family: 'Special Elite', 'Noto Serif TC';
             position: absolute;
             top: -9999px;
             left: -9999px;
@@ -209,8 +210,7 @@
 <body class="min-h-screen flex items-center justify-center p-4">
 
     <!-- 隱藏元素，強迫瀏覽器下載字體 -->
-    <div class="font-preload" style="font-family: 'Special Elite';">Font Preloader</div>
-    <div class="font-preload" style="font-family: 'Noto Sans TC';">字體預載</div>
+    <div class="font-preload">Special Elite and Noto Serif TC Loading...</div>
 
     <!-- 3D 啟動頁面 -->
     <div id="launch-page">
@@ -316,21 +316,25 @@
             bgm = document.getElementById('bgm');
             successSound = document.getElementById('success-sound');
             lateSound = document.getElementById('late-sound');
+
+            // 修正：立即綁定啟動頁點擊事件
+            showLaunchPage();
             
             db = window.db;
             auth = window.auth;
             APP_ID = window.APP_ID;
             fs = window.fs;
 
+            // 這裡是 Firebase 的檢查迴圈，但不應影響啟動頁點擊
             if (!db || !auth || !APP_ID || !fs) {
                 setTimeout(initGame, 1000);
                 return;
             }
-            showLaunchPage();
         }
 
         function showLaunchPage() {
             const launchPage = document.getElementById('launch-page');
+            if (!launchPage || launchPage.onclick) return; // 確保只綁定一次
             launchPage.onclick = () => {
                 startBGM(); 
                 launchPage.style.opacity = "0";
@@ -710,7 +714,7 @@
             // 頂部資訊區
             let finalHtml = `
                 <div class="text-center">
-                    <h2 class="text-4xl md:text-5xl font-extrabold text-yellow-700 mt-4 animate-bounce">你成功打開金庫！</h2>
+                    <h2 class="text-4xl md:text-5 font-extrabold text-yellow-700 mt-4 animate-bounce">你成功打開金庫！</h2>
                     <p class="text-xl font-bold mb-2">代號: <span class="text-red-600">${playerName}</span></p>
                     <p class="text-2xl font-extrabold mb-4 text-red-700">耗時: ${completionTime} 秒</p>
                     <div class="bg-yellow-200 p-3 rounded-lg shadow-md mb-6">
@@ -744,7 +748,7 @@
         async function generateShareImage(tRank, total) {
             showMessage("正在下載加密字體與繪製戰果圖...", false);
             
-            // 關鍵修正：確保 Canvas 繪圖前字體已加載
+            // 確保 Canvas 繪圖前字體已加載
             try {
                 await document.fonts.ready;
             } catch (e) {
@@ -776,26 +780,29 @@
             if (img) ctx.drawImage(img, 0, 0, 1080, 1920);
 
             ctx.textAlign = "center";
-            const maxTextWidth = 880; // 1080 - 100 - 100 = 880px 保留左右各 100px 距離
+            const maxTextWidth = 880; // 左右各 100px 距離
             
             // 重新分佈文字，維持相等垂直間距 (Gap: 150px)
-            // L1: 450px, L2: 600px, L3: 750px
+            // L1: 430px, L2: 580px, L3: 730px
+            
+            const shareFont = "bold 85px 'Special Elite', 'Noto Serif TC', serif";
+            const shareFontSmall = "bold 65px 'Special Elite', 'Noto Serif TC', serif";
             
             // 1. 特工代號
             ctx.fillStyle = "#FFFFFF";
-            ctx.font = "bold 85px 'Special Elite', 'Noto Sans TC'";
-            ctx.fillText(`特工代號：${playerName}`, 540, 450, maxTextWidth); 
+            ctx.font = shareFont;
+            ctx.fillText(`特工代號：${playerName}`, 540, 430, maxTextWidth); 
 
             // 2. 金庫破解耗時 (間隔 150px)
             ctx.fillStyle = "#fbbf24"; 
-            ctx.font = "bold 95px 'Special Elite', 'Inter'"; 
-            ctx.fillText(`金庫破解耗時：${completionTime} 秒`, 540, 600, maxTextWidth);
+            ctx.font = shareFont; 
+            ctx.fillText(`金庫破解耗時：${completionTime} 秒`, 540, 580, maxTextWidth);
 
             // 3. 最速懸賞榜 (間隔 150px)
             ctx.fillStyle = "#FFFFFF";
-            ctx.font = "bold 65px 'Special Elite', 'Noto Sans TC'";
+            ctx.font = shareFontSmall;
             const rankDisplay = (tRank && tRank !== 'N/A' && total !== 'N/A') ? `No. ${tRank} / ${total}` : "MISSION SUCCESS";
-            ctx.fillText(`最速懸賞榜：${rankDisplay}`, 540, 750, maxTextWidth);
+            ctx.fillText(`最速懸賞榜：${rankDisplay}`, 540, 730, maxTextWidth);
 
             const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
             const modal = document.getElementById('image-modal');
