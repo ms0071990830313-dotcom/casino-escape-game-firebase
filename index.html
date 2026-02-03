@@ -7,7 +7,850 @@
     <!-- 載入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=Noto+Sans+TC:wght@400;700&family=Special+Elite&display=swap" rel="stylesheet">
+    <style><!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>黑色追緝令：賭場風雲</title>
+    <!-- 載入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 載入 Special Elite (英文) 與 Noto Serif TC (中文宋體，具備電影機密文件質感) -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=Noto+Sans+TC:wght@400;700&family=Noto+Serif+TC:wght@700&family=Special+Elite&display=swap" rel="stylesheet">
     <style>
+        /* 使用 Inter 和 Noto Sans TC 確保介面中英文字體美觀 */
+        body {
+            font-family: 'Noto Sans TC', 'Inter', sans-serif;
+            background-color: #1a1a2e; /* 深色背景, 符合黑幫主題 */
+            overflow-x: hidden;
+        }
+        /* 強制載入字體的小技巧，確保 Canvas 能抓到 */
+        .font-preload {
+            font-family: 'Special Elite', 'Noto Serif TC';
+            position: absolute;
+            top: -9999px;
+            left: -9999px;
+            opacity: 0;
+        }
+        .text-shadow-custom {
+            text-shadow: 0 0 5px rgba(255, 215, 0, 0.5), 0 0 10px rgba(255, 215, 0, 0.3);
+        }
+        .gold-button {
+            transition: all 0.2s;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -2px rgba(0, 0, 0, 0.4);
+            font-weight: 700;
+        }
+        .gold-button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -4px rgba(0, 0, 0, 0.4);
+        }
+        .gold-button:active:not(:disabled) {
+            transform: translateY(0);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
+        }
+        .gold-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            filter: grayscale(0.5);
+        }
+        /* 成功畫面特效 */
+        .success-bg {
+            background: radial-gradient(circle at center, #ffeb3b 0%, #ffc107 70%, #ff9800 100%);
+            animation: pulse-gold 1.5s infinite alternate;
+        }
+        @keyframes pulse-gold {
+            from { filter: brightness(1.0); }
+            to { filter: brightness(1.1); }
+        }
+        /* 時間快到時的閃爍效果 */
+        .timer-warning {
+            animation: flash-red 0.5s infinite alternate;
+        }
+        @keyframes flash-red {
+            from { background-color: #8b0000; }
+            to { background-color: #dc2626; }
+        }
+        /* 倒數剩下 2 分鐘時的放大效果 */
+        .timer-large {
+            font-size: 1.5rem; /* 變大 */
+            padding: 0.75rem; /* 增加內邊距 */
+            border: 3px solid #ffeb3b; /* 增加邊框強調 */
+            box-shadow: 0 0 15px rgba(255, 215, 0, 0.7);
+            transition: all 0.3s ease-in-out;
+        }
+        /* 敘事淡入淡出效果 */
+        .fade-transition {
+            opacity: 0;
+            transition: opacity 1s ease-in-out;
+        }
+        .fade-in {
+            opacity: 1;
+        }
+        .fade-out {
+            opacity: 0;
+        }
+        /* 老大選擇介面樣式 */
+        .boss-item {
+            aspect-ratio: 1 / 1;
+        }
+        .boss-check {
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        /* 排行榜表格樣式 */
+        .leaderboard-table {
+            border-collapse: separate;
+            border-spacing: 0 5px; /* 增加行間距 */
+        }
+        .leaderboard-table td {
+            padding: 8px;
+        }
+        /* 排行榜捲軸自定義樣式 */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.1);
+            border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #eab308;
+            border-radius: 10px;
+        }
+
+        /* --- 3D 啟動頁樣式 --- */
+        #launch-page {
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background-color: #0f0f1b;
+            perspective: 1200px;
+            cursor: pointer;
+            transition: opacity 1s ease-out;
+        }
+        #launch-logo-container {
+            transform-style: preserve-3d;
+            animation: rotate3D 8s infinite linear;
+        }
+        #launch-logo {
+            width: 70vw;
+            max-width: 450px;
+            filter: drop-shadow(0 0 20px rgba(255, 215, 0, 0.4));
+        }
+        @keyframes rotate3D {
+            0% { transform: rotateY(0deg) rotateX(5deg); }
+            100% { transform: rotateY(360deg) rotateX(5deg); }
+        }
+        .tap-to-start {
+            margin-top: 3rem;
+            color: #fbbf24;
+            font-weight: bold;
+            letter-spacing: 0.2em;
+            animation: blink 2s infinite;
+            text-transform: uppercase;
+            font-size: 1.1rem;
+        }
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        /* --- 分享圖片彈窗樣式 --- */
+        #image-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 10000;
+            background-color: rgba(0,0,0,0.9);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        #modal-canvas-preview {
+            max-width: 100%;
+            max-height: 70vh;
+            border: 2px solid #fbbf24;
+            border-radius: 8px;
+            box-shadow: 0 0 30px rgba(251, 191, 36, 0.5);
+        }
+    </style>
+    
+    <!-- 引入 Firebase SDK -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, serverTimestamp, query, where, orderBy, getDocs, Timestamp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        const firebaseConfig = {
+            apiKey: "AIzaSyCR-oc58h8fmdqt-7VU1F9hstznu0l0vvQ",
+            authDomain: "casini-game.firebaseapp.com",
+            projectId: "casini-game",
+            storageBucket: "casini-game.firebasestorage.app",
+            messagingSenderId: "615777698848",
+            appId: "1:615777698848:web:a6ec9b8eb872168d86a845"
+        };
+        
+        window.firebaseApp = initializeApp(firebaseConfig);
+        window.db = getFirestore(window.firebaseApp);
+        window.auth = getAuth(window.firebaseApp);
+        window.APP_ID = firebaseConfig.projectId;
+        window.currentUserId = null;
+        window.isAuthReady = false;
+
+        setLogLevel('error');
+        
+        onAuthStateChanged(window.auth, (user) => {
+            if (user) {
+                window.currentUserId = user.uid;
+            } else {
+                window.currentUserId = null;
+            }
+            window.isAuthReady = true;
+        });
+        
+        window.fs = { collection, addDoc, serverTimestamp, query, where, orderBy, getDocs, Timestamp, signInAnonymously };
+    </script>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4">
+
+    <!-- 隱藏元素，強迫瀏覽器下載字體 -->
+    <div class="font-preload">Special Elite and Noto Serif TC Loading...</div>
+
+    <!-- 3D 啟動頁面 -->
+    <div id="launch-page">
+        <div id="launch-logo-container">
+            <img id="launch-logo" src="name.png" onerror="this.onerror=null; this.src='https://placehold.co/400x400/29294F/FFF?text=黑色追緝令';" alt="遊戲標題圖">
+        </div>
+        <div class="tap-to-start">點擊螢幕開始任務</div>
+    </div>
+
+    <!-- 分享圖片彈窗 (Modal) -->
+    <div id="image-modal" onclick="closeImageModal()">
+        <div class="bg-gray-900 p-4 rounded-xl flex flex-col items-center space-y-4 max-w-sm w-full" onclick="event.stopPropagation()">
+            <h3 class="text-yellow-400 font-bold text-lg">戰果分享卡</h3>
+            <img id="modal-canvas-preview" src="" alt="戰果預覽">
+            <p class="text-gray-400 text-xs text-center">長按上方圖片儲存到手機，即可分享至限動！</p>
+            <div class="flex space-x-2 w-full">
+                <button onclick="shareViaWebAPI()" id="web-share-btn" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-lg text-sm">手機分享</button>
+                <button onclick="closeImageModal()" class="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 rounded-lg text-sm">關閉</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 音效資源 -->
+    <audio id="bgm" loop>
+        <source src="Mission Impossible Theme (Full Theme).mp3" type="audio/mp3">
+    </audio>
+    <audio id="success-sound">
+        <source src="SUCCESS_Sound.mp4" type="audio/mp4">
+    </audio>
+    <audio id="late-sound">
+        <source src="LATE_sound.mp4" type="audio/mp4">
+    </audio>
+
+    <div id="game-container" class="bg-gray-800 text-white p-6 md:p-10 rounded-xl shadow-2xl max-w-lg w-full transition-all duration-500">
+        <h1 class="text-3xl md:text-4xl font-bold text-center mb-6 text-yellow-400 text-shadow-custom">
+            黑色追緝令：賭場風雲
+        </h1>
+
+        <div id="timer-display" class="text-center text-xl font-mono p-2 mb-4 rounded-lg bg-red-800 text-yellow-300 shadow-inner hidden"></div>
+
+        <div id="game-content" class="text-lg space-y-4"></div>
+
+        <div id="game-controls" class="mt-8 flex flex-col space-y-4"></div>
+
+        <div id="message-area" class="mt-4 p-3 rounded-lg text-center font-bold hidden"></div>
+    </div>
+
+    <script type="text/javascript">
+        let db = null;
+        let auth = null;
+        let APP_ID = null;
+        let fs = null;
+        
+        const GAME_STATE = {
+            START: 0,
+            VAULT_LOCATE: 1,
+            CLUE_HUNT: 2,
+            CODE_ENTRY: 3,
+            SUCCESS: 4,
+            FAIL: 5
+        };
+
+        const CORRECT_CLUE = "金庫守則";
+        const CORRECT_CODE = "275"; 
+        const INITIAL_TIME_SECONDS = 600;
+
+        let timerInterval = null;
+        let timeLeft = INITIAL_TIME_SECONDS;
+        let currentState = GAME_STATE.START;
+        let playerName = "";
+        let selectedBossId = null; 
+        let missionStartTime = 0;
+        let completionTime = 0;
+        let hintsRevealed = 0; 
+        let currentDialogueStep = 0; 
+        let currentSuccessRank = 'N/A';
+        
+        let container, contentDiv, controlsDiv, messageArea, timerDisplay, bgm, successSound, lateSound;
+
+        const DIALOGUE_STEPS = (name) => [
+            { speaker: 'BOSS', text: `<span class="text-red-400">${name}</span>你來啦⋯⋯`, buttonText: "繼續" },
+            { speaker: 'PLAYER', text: `老大！有何吩咐？`, buttonText: "繼續" },
+            { speaker: 'BOSS', text: `你被邀請到這場由黑幫舉辦的賭場宴會，表面上是來一擲千金的客人，但你真正的目標是賭場後面的那座<span class="text-yellow-500 font-bold">金庫</span>！`, buttonText: "繼續" },
+            { 
+                speaker: 'BOSS', 
+                text: `今天很多其他黑幫成員也是打著跟你一樣的主意，你必須爭分奪秒，盡快把金庫打開，<span class="text-yellow-400 font-bold">不然裡面的金幣會被其他人捷足先登！</span>`, 
+                buttonText: "繼續" 
+            },
+            {
+                speaker: 'BOSS',
+                text: `現在，你趁保鏢在打瞌睡，已經偷偷潛入到了賭場的金庫位置。<br>噓！小心不要被發現！<br><span class="text-yellow-400 font-bold">十分鐘內</span>你必須解出這個謎題，不然換班的人就要來了，你會被抓個正著！<br>仔細查看金庫在哪裡？還有密碼，你需要知道密碼是幾位數。`,
+                buttonText: "偷偷潛入金庫",
+                action: 'START_MISSION'
+            }
+        ];
+
+        function initGame() {
+            container = document.getElementById('game-container');
+            contentDiv = document.getElementById('game-content');
+            controlsDiv = document.getElementById('game-controls');
+            messageArea = document.getElementById('message-area');
+            timerDisplay = document.getElementById('timer-display');
+            bgm = document.getElementById('bgm');
+            successSound = document.getElementById('success-sound');
+            lateSound = document.getElementById('late-sound');
+            
+            db = window.db;
+            auth = window.auth;
+            APP_ID = window.APP_ID;
+            fs = window.fs;
+
+            if (!db || !auth || !APP_ID || !fs) {
+                setTimeout(initGame, 1000);
+                return;
+            }
+            showLaunchPage();
+        }
+
+        function showLaunchPage() {
+            const launchPage = document.getElementById('launch-page');
+            launchPage.onclick = () => {
+                startBGM(); 
+                launchPage.style.opacity = "0";
+                setTimeout(() => {
+                    launchPage.style.display = "none";
+                    goToInitialImageScreen();
+                }, 1000);
+            };
+        }
+        
+        function startBGM() {
+            if (bgm && bgm.paused) {
+                bgm.volume = 0.5;
+                bgm.play().catch(error => console.log("BGM 播放等待。"));
+            }
+        }
+
+        function formatTime(seconds) {
+            const minutes = Math.floor(seconds / 60);
+            const remainingSeconds = seconds % 60;
+            return `${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`;
+        }
+
+        function updateTimer() {
+            if (timeLeft < 0) timeLeft = 0;
+            timerDisplay.textContent = `剩餘時間: ${formatTime(timeLeft)}`;
+            if (timeLeft <= 120 && timeLeft > 0) timerDisplay.classList.add('timer-large');
+            else timerDisplay.classList.remove('timer-large');
+            if (timeLeft <= 60 && timeLeft > 0) timerDisplay.classList.add('timer-warning');
+            else timerDisplay.classList.remove('timer-warning');
+            if (timeLeft <= 0) {
+                stopTimer();
+                timerDisplay.textContent = "時間到！換班保鏢已到，請快速完成密碼輸入。";
+                return;
+            }
+            timeLeft--;
+        }
+
+        function startTimer() {
+            if (timerInterval) clearInterval(timerInterval);
+            timeLeft = INITIAL_TIME_SECONDS;
+            timerDisplay.classList.remove('hidden');
+            updateTimer(); 
+            timerInterval = setInterval(updateTimer, 1000);
+        }
+
+        function stopTimer() { 
+            if (timerInterval) { 
+                clearInterval(timerInterval); 
+                timerInterval = null; 
+            } 
+        }
+
+        function showMessage(text, isError = false) {
+            messageArea.textContent = text;
+            messageArea.className = `mt-4 p-3 rounded-lg text-center font-bold ${isError ? 'bg-red-700' : 'bg-green-700'}`;
+            messageArea.classList.remove('hidden');
+            setTimeout(() => { messageArea.classList.add('hidden'); }, 3500);
+        }
+
+        function clearScreen() {
+            contentDiv.innerHTML = '';
+            controlsDiv.innerHTML = '';
+        }
+
+        function renderButton(text, onClick, id = null) {
+            const button = document.createElement('button');
+            button.textContent = text;
+            button.className = 'gold-button bg-yellow-500 hover:bg-yellow-600 text-gray-900 px-6 py-3 rounded-lg w-full';
+            button.onclick = (e) => onClick(e);
+            if (id) button.id = id;
+            controlsDiv.appendChild(button);
+            return button;
+        }
+
+        function renderInput(placeholder, buttonText, onSubmit, inputId, maxLength) {
+            const constContainer = document.createElement('div');
+            constContainer.className = 'flex flex-col space-y-3';
+            const input = document.createElement('input');
+            input.id = inputId;
+            input.type = 'text';
+            input.maxLength = maxLength || 50;
+            input.placeholder = placeholder;
+            input.className = 'p-3 rounded-lg bg-gray-700 text-white border-2 border-yellow-500 focus:outline-none focus:border-yellow-400';
+            const button = document.createElement('button');
+            button.textContent = buttonText;
+            button.className = 'gold-button bg-yellow-500 hover:bg-yellow-600 text-gray-900 px-6 py-3 rounded-lg';
+            button.onclick = (e) => onSubmit(document.getElementById(inputId).value, e.target);
+            input.addEventListener('keyup', (event) => {
+                if (event.key === 'Enter') onSubmit(document.getElementById(inputId).value, button);
+            });
+            constContainer.appendChild(input);
+            constContainer.appendChild(button);
+            controlsDiv.appendChild(constContainer);
+        }
+
+        function revealHint() {
+            const HINTS = [
+                "提示 1: 你有發現金庫上面的提示「老大才能碰」，老大在賭場裡的花色通常是代表『黑桃』，但是金庫守則上似乎不只有一種顏色的『黑桃』⋯⋯",
+                "提示 2: 金庫守則上似乎有很多不同顏色的筆畫，仔細看看好像是數字⋯⋯也許這跟密碼有什麼關係？",
+                "金庫密碼是三位數，紅色的黑桃也是三個⋯⋯剩下就是每個黑桃分別代表哪個數字了⋯⋯"
+            ];
+            if (hintsRevealed >= HINTS.length) {
+                showMessage("已經沒有更多提示了！", true);
+                return;
+            }
+            const timeDeduction = 60;
+            if (timeLeft - timeDeduction <= 0) {
+                timeLeft = 0; 
+                showMessage("時間用盡！你無法再獲取提示了。", true);
+                updateTimer();
+            } else {
+                timeLeft -= timeDeduction;
+                showMessage(`扣除 ${timeDeduction} 秒。請參考新提示。`, false);
+                updateTimer();
+            }
+            const hintDiv = document.getElementById('hint-messages');
+            const p = document.createElement('p');
+            p.className = "mt-2 p-3 bg-gray-700 rounded-lg border border-red-500 transition-all duration-300 transform scale-100 hover:scale-[1.02] text-sm";
+            p.innerHTML = `<span class="text-red-400 font-bold">[提示 #${hintsRevealed + 1} (-60秒)]</span>: ${HINTS[hintsRevealed]}`;
+            hintDiv.appendChild(p);
+            hintsRevealed++;
+            const hintButton = document.getElementById('reveal-hint-button');
+            if (hintsRevealed >= HINTS.length) {
+                hintButton.textContent = "已無更多提示";
+                hintButton.disabled = true;
+                hintButton.classList.add('bg-gray-500', 'cursor-not-allowed');
+            }
+        }
+
+        function getPublicRanksCollectionRef() {
+            if (!db || !APP_ID) return null;
+            return fs.collection(db, `artifacts/${window.APP_ID}/public/data/puzzle_ranks`);
+        }
+
+        async function recordCompletionAndShowRank() {
+            const uid = window.currentUserId;
+            const defaultResult = { rank: 'N/A', successRank: 'N/A', timeRank: 'N/A', totalRecords: 'N/A', topTenRanks: [] };
+            if (!db || !uid) return defaultResult;
+            const ranksRef = getPublicRanksCollectionRef();
+            if (!ranksRef) return defaultResult;
+            const newRecord = { name: playerName, userId: uid, completionTime: completionTime, timestamp: fs.serverTimestamp(), bossId: selectedBossId };
+            let docRef;
+            try { docRef = await fs.addDoc(ranksRef, newRecord); } catch (e) { return defaultResult; }
+            try {
+                const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0); 
+                const querySnapshot = await fs.getDocs(fs.query(ranksRef));
+                const allTodayDocs = querySnapshot.docs.map(d => ({ id: d.id, ...d.data() })).filter(d => d.timestamp && d.timestamp.toDate() >= todayStart);
+                
+                const sortedByEntry = [...allTodayDocs].sort((a, b) => (a.timestamp?.seconds || 0) - (b.timestamp?.seconds || 0));
+                const rank = sortedByEntry.findIndex(d => d.id === docRef.id) + 1;
+                
+                const qualifiers = sortedByEntry.filter(d => d.completionTime < INITIAL_TIME_SECONDS);
+                const successRank = qualifiers.findIndex(d => d.id === docRef.id) + 1;
+                
+                // 計算耗時排名
+                const sortedByTime = [...allTodayDocs].sort((a, b) => a.completionTime - b.completionTime);
+                const timeRank = sortedByTime.findIndex(d => d.id === docRef.id) + 1;
+
+                const topTenRanks = sortedByTime.slice(0, 50).map((data, index) => ({
+                    rank: index + 1, name: data.name || "神秘特工", time: formatTime(data.completionTime || 0), isPlayer: data.userId === uid
+                }));
+                
+                return { rank, successRank: successRank > 0 ? successRank : 'N/A', timeRank, totalRecords: allTodayDocs.length, topTenRanks };
+            } catch (e) { return defaultResult; }
+        }
+
+        function renderLeaderboard(ranks) {
+            if (!ranks || ranks.length === 0) return `<p class="text-center p-4 text-gray-500">目前沒有排名紀錄。</p>`;
+            let tableRows = ranks.map(rank => `<tr class="${rank.isPlayer ? 'bg-yellow-400 text-gray-900 font-extrabold shadow-md' : 'bg-gray-700 text-gray-200'} transition hover:bg-yellow-200"><td class="p-2 text-center rounded-l-lg">${rank.rank}</td><td class="p-2 font-semibold">${rank.name}</td><td class="p-2 text-right rounded-r-lg font-mono">${rank.time}</td></tr>`).join('');
+            return `<div class="mt-8 pt-4 border-t border-yellow-600"><h3 class="text-2xl font-bold text-yellow-500 mb-4 text-center">今日最速黑幫 (Top 50)</h3><div class="w-full max-w-sm mx-auto bg-gray-900 rounded-lg overflow-hidden"><div class="max-h-96 overflow-y-auto custom-scrollbar p-1"><table class="leaderboard-table w-full text-sm"><thead><tr class="text-gray-400 sticky top-0 bg-gray-900 z-10"><th class="p-2 w-1/6 text-center">排名</th><th class="p-2 w-3/6 text-left">化名</th><th class="p-2 w-2/6 text-right">耗時</th></tr></thead><tbody>${tableRows}</tbody></table></div></div><p class="text-center text-xs text-gray-500 mt-2">滑動上方列表查看更多排名</p></div>`;
+        }
+
+        function displayNextDialogue() {
+            const dialogueData = DIALOGUE_STEPS(playerName);
+            if (currentDialogueStep >= dialogueData.length) { goToVaultLocate(); return; }
+            const step = dialogueData[currentDialogueStep];
+            const currentContent = document.getElementById('dialogue-wrapper');
+            if (currentContent) { currentContent.classList.remove('fade-in'); currentContent.classList.add('fade-out'); }
+            setTimeout(() => {
+                controlsDiv.innerHTML = '';
+                let wrapper = document.getElementById('dialogue-wrapper') || document.createElement('div');
+                if (!wrapper.id) { wrapper.id = 'dialogue-wrapper'; contentDiv.appendChild(wrapper); }
+                wrapper.className = 'fade-transition space-y-4 fade-in'; 
+                const speakerName = step.speaker === 'PLAYER' ? playerName : '老大';
+                wrapper.innerHTML = `<div class="p-4 bg-gray-700 rounded-lg shadow-inner"><p class="${step.speaker === 'BOSS' ? 'text-yellow-400' : 'text-green-400'} font-bold mb-2">${speakerName}:</p><p class="text-gray-200">${step.text}</p></div>`;
+                renderButton(step.buttonText, () => {
+                    if (step.action === 'START_MISSION') { missionStartTime = Date.now(); startTimer(); goToVaultLocate(); }
+                    else { currentDialogueStep++; displayNextDialogue(); }
+                });
+                window.scrollTo(0, 0); 
+            }, 1000); 
+        }
+
+        function goToInitialImageScreen() {
+            clearScreen(); stopTimer(); timerDisplay.classList.add('hidden');
+            document.body.className = 'min-h-screen flex items-center justify-center p-4 bg-gray-900';
+            contentDiv.innerHTML = `<div class="text-center space-y-6"><p class="text-lg text-gray-300">一場秘密行動即將展開...</p><img src="cover.jpg" onerror="this.onerror=null; this.src='https://placehold.co/400x200/29294F/FFF?text=起始畫面圖片';" class="mx-auto w-full max-w-sm rounded-lg shadow-xl border-2 border-yellow-500 object-cover"></div>`;
+            const checkboxArea = document.createElement('div');
+            checkboxArea.className = 'mt-6 space-y-3 text-left text-gray-200';
+            checkboxArea.innerHTML = `<label class="flex items-center space-x-3 cursor-pointer"><input type="checkbox" id="check-network" class="form-checkbox h-5 w-5 text-yellow-500 bg-gray-700 border-gray-500 rounded focus:ring-0"><span>請確保網路穩定</span></label><label class="flex items-center space-x-3 cursor-pointer"><input type="checkbox" id="check-volume" class="form-checkbox h-5 w-5 text-yellow-500 bg-gray-700 border-gray-500 rounded focus:ring-0"><span>請打開遊戲音量</span></label>`;
+            controlsDiv.appendChild(checkboxArea);
+            const initialButton = renderButton("進入秘密任務", () => {
+                if (!initialButton.disabled) { if (window.auth && !window.auth.currentUser) fs.signInAnonymously(auth); goToBossSelection(); }
+                else showMessage("請確保上方兩項皆已確認", true);
+            }, 'initial-start-button');
+            initialButton.disabled = true; initialButton.className = 'gold-button bg-gray-500 cursor-not-allowed text-white px-6 py-3 rounded-lg w-full mt-6';
+            const checkPre = () => {
+                const isReady = document.getElementById('check-network').checked && document.getElementById('check-volume').checked;
+                initialButton.disabled = !isReady;
+                initialButton.className = isReady ? 'gold-button bg-yellow-500 hover:bg-yellow-600 text-gray-900 px-6 py-3 rounded-lg w-full mt-6' : 'gold-button bg-gray-500 cursor-not-allowed text-white px-6 py-3 rounded-lg w-full mt-6';
+            };
+            document.getElementById('check-network').addEventListener('change', checkPre);
+            document.getElementById('check-volume').addEventListener('change', checkPre);
+        }
+
+        function goToBossSelection() {
+            clearScreen(); window.scrollTo(0, 0); selectedBossId = null;
+            contentDiv.innerHTML = `<h2 class="text-2xl font-bold text-yellow-400 text-center mb-4">你的老大是？</h2><p class="text-sm text-gray-400 text-center mb-6">*人物不影響故事進行</p><div id="boss-grid" class="grid grid-cols-3 gap-2"></div>`;
+            const confirmButton = renderButton("我的老大是他/她", () => window.isAuthReady && window.currentUserId ? goToNameInput() : showMessage("伺服器連線中，請稍候再試。", true), 'confirm-boss-button');
+            confirmButton.disabled = true; confirmButton.className = 'gold-button bg-gray-500 cursor-not-allowed text-white px-6 py-3 rounded-lg w-full mt-6';
+            const gridDiv = document.getElementById('boss-grid');
+            [1, 2, 3, 4, 5, 6, 7, 8, 9].forEach(id => {
+                const item = document.createElement('div');
+                item.className = 'boss-item relative cursor-pointer border-4 border-transparent rounded-lg overflow-hidden transition-all duration-200 hover:border-yellow-500';
+                item.innerHTML = `<img src="boss_${id}.png" onerror="this.onerror=null; this.src='https://placehold.co/100x100/3A3A3A/FFF?text=Boss%20${id}';" class="w-full h-full object-cover rounded-md"><div id="check-${id}" class="boss-check absolute inset-0 bg-black/50 flex items-center justify-center text-4xl text-yellow-400">✓</div>`;
+                item.onclick = () => {
+                    selectedBossId = id;
+                    document.querySelectorAll('.boss-item').forEach(i => i.classList.remove('border-yellow-400'));
+                    document.querySelectorAll('.boss-check').forEach(c => c.classList.remove('opacity-100'));
+                    item.classList.add('border-yellow-400'); item.querySelector('.boss-check').classList.add('opacity-100');
+                    if (window.isAuthReady) { confirmButton.disabled = false; confirmButton.className = 'gold-button bg-yellow-500 hover:bg-yellow-600 text-gray-900 px-6 py-3 rounded-lg w-full mt-6'; }
+                };
+                gridDiv.appendChild(item);
+            });
+        }
+
+        function goToNameInput() {
+            clearScreen(); contentDiv.innerHTML = `<h2 class="text-2xl font-bold text-yellow-400 text-center mb-6">告訴老大你的代號</h2><p class="text-md text-gray-400 text-center">這是你獨一無二的身份，將用於紀錄你的通關順序。</p>`;
+            renderInput("請輸入你的黑幫化名（2-10個字）", "確認代號", async (name, button) => {
+                const trimmedName = name.trim();
+                if (trimmedName.length < 2 || trimmedName.length > 10) return showMessage("代號長度需在 2 到 10 個字元之間。", true);
+                button.disabled = true; button.textContent = "正在驗證代號...";
+                try {
+                    const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+                    const snap = await fs.getDocs(getPublicRanksCollectionRef());
+                    if (snap.docs.some(doc => doc.data().name === trimmedName && doc.data().timestamp?.toDate() >= todayStart)) {
+                        showMessage("你的代號已被使用，請更換一個。", true); button.disabled = false; button.textContent = "確認代號";
+                    } else { playerName = trimmedName; showMessage(`代號：${playerName}，確認！`); setTimeout(goToMissionDialogue, 1500); }
+                } catch (e) { showMessage("連線驗證失敗，請重試。", true); button.disabled = false; }
+            }, 'codename-input', 10);
+            document.getElementById('codename-input').focus();
+        }
+
+        function goToMissionDialogue() {
+            currentState = GAME_STATE.START; clearScreen(); stopTimer(); hintsRevealed = 0; timerDisplay.classList.add('hidden'); startBGM(); 
+            contentDiv.innerHTML = `<div class="text-center mb-6"><img src="boss_${selectedBossId}.png" onerror="this.onerror=null; this.src='https://placehold.co/120x120/3A3A3A/FFF?text=BOSS';" class="mx-auto w-32 h-32 object-cover rounded-full shadow-lg border-4 border-red-500"></div><div id="dialogue-content-area" class="space-y-4"></div>`;
+            currentDialogueStep = 0; displayNextDialogue();
+        }
+
+        function goToVaultLocate() {
+            currentState = GAME_STATE.VAULT_LOCATE; clearScreen(); window.scrollTo(0, 0);
+            contentDiv.innerHTML = `<p>你現在已經成功潛入賭場放<span class="text-yellow-500 font-bold">金庫</span>的地方！趕快找找金庫在哪裡？</p><hr class="my-4 border-gray-600"><p class="text-yellow-400"><strong>【行動指示：第一步】</strong></p><p>仔細觀察現實世界中的金庫寶箱，<strong>密碼鎖是幾位數？</strong></p>`;
+            renderInput("請輸入密碼鎖的位數 (數字)", "確認位數", checkVaultDigits, 'digit-input', 1);
+            document.getElementById('digit-input').type = 'number';
+        }
+
+        function checkVaultDigits(input) {
+            const digitInput = parseInt(input.trim());
+            if (digitInput === 3) {
+                showMessage("數字正確！你發現了金庫密碼是三位數密碼鎖。", false);
+                setTimeout(() => { window.scrollTo(0, 0); goToClueHunt(); }, 2500);
+                return;
+            }
+            let hintMessage = "這個數字不正確，再嘗試看看";
+            if (isNaN(digitInput) || digitInput === 0) hintMessage = "請輸入一個數字。你需要找到金庫寶箱，上面應該有密碼鎖。";
+            else if (digitInput > 4) hintMessage = `這個數字太大了。再仔細看看，這個鎖的結構似乎很簡單，只靠幾個轉盤運作。`;
+            else if (digitInput === 2) hintMessage = `只有兩位數嗎？請再靠近一點數數看，是不是有⋯⋯？`;
+            else if (digitInput === 4) hintMessage = `不對，它不是四位數的。仔細數數，密碼鎖上有幾個可以轉動的。`;
+            showMessage(hintMessage, true);
+        }
+
+        function goToClueHunt() {
+            currentState = GAME_STATE.CLUE_HUNT; clearScreen(); window.scrollTo(0, 0);
+            contentDiv.innerHTML = `<p>你確認了，金庫鎖需要<strong>三位數密碼</strong>才能打開。同時，你發現<strong>金庫上有一個提示</strong>寫著什麼⋯⋯。</p><p>金庫密碼每天都會換，但你事前已經調查過，賭場主人記性學差，<strong>相關的提示就在金庫附近</strong>。</p><hr class="my-4 border-gray-600"><p class="text-yellow-400"><strong>【行動指示：第二步】</strong></p><p>環顧四周，尋找周邊物品，什麼東西看起來像是在提供密碼的線索？</p>`;
+            renderInput("請輸入你發現的線索名稱全名 ", "確認線索", checkClue, 'clue-input');
+        }
+
+        function checkClue(input) {
+            if (input.trim().replace(/\s/g, '').toLowerCase() === CORRECT_CLUE.toLowerCase()) {
+                showMessage("線索確認！這就是我們要找的！"); setTimeout(() => goToCodeEntry(), 1500);
+            } else {
+                let hintMessage = "再找找看，應該不會放在太遠的地方";
+                if (input.includes("規則") || input.includes("守則")) hintMessage = "很接近了！試試看完整的名稱！";
+                showMessage(hintMessage, true);
+            }
+        }
+
+        function goToCodeEntry() {
+            currentState = GAME_STATE.CODE_ENTRY; clearScreen(); window.scrollTo(0, 0);
+            contentDiv.innerHTML = `<p>很好，你已經掌握了關鍵線索：<strong>【金庫守則】</strong>。</p><p>結合你剛才在金庫鎖上發現的提示，現在是時候破解三位數密碼了！</p><hr class="my-4 border-gray-600"><p class="text-yellow-400"><strong>【行動指示：第三步】</strong></p><p>根據守則內容和提示，推算出三位密碼。金庫裡的金幣等你！</p>`;
+            const hintSection = document.createElement('div'); hintSection.className = 'mt-6 p-4 bg-gray-700 rounded-lg shadow-inner';
+            hintSection.innerHTML = `<h3 class="text-xl font-bold text-red-400 mb-2 flex items-center"><span class="text-3xl mr-2">💡</span><span>3個提示</span></h3><p class="text-sm text-red-300 mb-3">時間歸零仍可打開金庫，但是可能會發生⋯⋯</p><div id="hint-messages" class="space-y-2"></div>`;
+            const hintButton = document.createElement('button'); hintButton.id = 'reveal-hint-button'; hintButton.textContent = "每個提示扣除 60秒"; hintButton.className = 'gold-button bg-red-500 hover:bg-red-600 text-white px-6 py-3 rounded-lg w-full mt-4';
+            hintButton.onclick = revealHint; hintSection.appendChild(hintButton); controlsDiv.appendChild(hintSection);
+            renderInput("每輸錯一次扣除30秒", "解鎖金庫！", (v, btn) => {
+                if (v === CORRECT_CODE) {
+                    btn.disabled = true; btn.textContent = "正在通報老大...";
+                    const penaltyTaken = INITIAL_TIME_SECONDS - Math.max(0, timeLeft);
+                    const actualTaken = Math.floor((Date.now() - missionStartTime) / 1000);
+                    completionTime = Math.max(penaltyTaken, actualTaken); 
+                    showMessage("密碼正確！正在解鎖..."); setTimeout(() => handleFinalRanking(), 2000);
+                } else {
+                    timeLeft = Math.max(0, timeLeft - 30); updateTimer();
+                    showMessage(timeLeft <= 0 ? "密碼錯誤！鎖定機制正在啟動... 時間已用盡！" : "密碼錯誤！小心警報就要響了！", true);
+                }
+            }, 'code-input', 3);
+        }
+
+        async function handleFinalRanking() {
+            currentState = GAME_STATE.SUCCESS; bgm.pause(); stopTimer(); timerDisplay.classList.add('hidden'); clearScreen();
+            contentDiv.innerHTML = `<div class="text-center py-10"><h2 class="text-3xl font-bold text-yellow-400 mb-4 text-shadow-custom">正在回報戰果並計算排名...</h2><div class="animate-spin rounded-full h-12 w-12 border-b-2 border-yellow-500 mx-auto mt-6"></div></div>`;
+            try {
+                const result = await recordCompletionAndShowRank();
+                const isGrandSuccess = (completionTime < INITIAL_TIME_SECONDS) && (result.successRank > 0 && result.successRank <= 50);
+                if (isGrandSuccess) { 
+                    successSound.play().catch(e => console.log(e)); 
+                    goToSuccess(result.rank, result.successRank, result.timeRank, result.totalRecords, result.topTenRanks); 
+                } else { 
+                    lateSound.play().catch(e => console.log(e)); 
+                    goToLateSuccess(result.rank, result.successRank, result.timeRank, result.totalRecords, result.topTenRanks); 
+                }
+            } catch (e) { goToLateSuccess('N/A', 'N/A', 'N/A', 'N/A', []); }
+        }
+
+        function goToSuccess(rank, successRank, timeRank, totalRecords, topTenRanks) {
+            document.body.className = 'min-h-screen flex items-center justify-center p-4 success-bg';
+            container.className = 'bg-yellow-100 text-gray-900 p-6 md:p-10 rounded-xl shadow-2xl max-w-lg w-full border-4 border-yellow-700';
+            clearScreen();
+            
+            // 頂部資訊區
+            let finalHtml = `
+                <div class="text-center">
+                    <h2 class="text-4xl md:text-5xl font-extrabold text-yellow-700 mt-4 animate-bounce">你成功打開金庫！</h2>
+                    <p class="text-xl font-bold mb-2">代號: <span class="text-red-600">${playerName}</span></p>
+                    <p class="text-2xl font-extrabold mb-4 text-red-700">耗時: ${completionTime} 秒</p>
+                    <div class="bg-yellow-200 p-3 rounded-lg shadow-md mb-6">
+                        <p class="text-xl font-extrabold text-black mb-1">🎉通關成功順位：第 ${successRank} 名 / 50 名</p>
+                        <p class="text-sm text-green-700 font-bold">今日第 ${rank} 位挑戰玩家!</p>
+                    </div>
+                    <p class="mt-6 text-xl">金山銀山就在眼前，你得手了！</p>
+                    <img src="SUCCESS_IMAGE.png" onerror="this.onerror=null; this.src='https://placehold.co/200x150/FFD700/000?text=SUCCESS';" class="mx-auto w-3/4 max-w-sm object-contain my-6 shadow-lg">
+                    <p class="mt-4 text-2xl font-bold p-3 bg-yellow-300 rounded-lg mb-6"><strong>請到簽到處領取獎項！</strong></p>
+                </div>
+            `;
+            
+            contentDiv.innerHTML = finalHtml;
+
+            // 插入分享按鈕 (位於排行榜上方)
+            const shareBtn = document.createElement('button');
+            shareBtn.textContent = "📸 產生戰績分享圖";
+            shareBtn.className = 'gold-button bg-yellow-500 hover:bg-yellow-600 text-gray-900 px-6 py-3 rounded-lg w-full font-bold mb-8 transition-all active:scale-95';
+            shareBtn.onclick = () => generateShareImage(timeRank, totalRecords);
+            contentDiv.appendChild(shareBtn);
+
+            // 插入排行榜
+            const leaderboardContainer = document.createElement('div');
+            leaderboardContainer.innerHTML = renderLeaderboard(topTenRanks);
+            contentDiv.appendChild(leaderboardContainer);
+        }
+
+        function goToLateSuccess(rank, successRank, timeRank, totalRecords, topTenRanks) {
+            document.body.className = 'min-h-screen flex items-center justify-center p-4 success-bg';
+            container.className = 'bg-yellow-100 text-gray-900 p-6 md:p-10 rounded-xl shadow-2xl max-w-lg w-full border-4 border-yellow-700';
+            clearScreen();
+
+            // 頂部資訊區
+            let finalHtml = `
+                <div class="text-center">
+                    <h2 class="text-4xl md:text-5xl font-extrabold text-yellow-700 mt-4 animate-bounce">你成功打開金庫！</h2>
+                    <p class="text-xl font-bold mb-2">代號: <span class="text-red-600">${playerName}</span></p>
+                    <p class="text-2xl font-extrabold mb-4 text-red-700">耗時: ${completionTime} 秒</p>
+                    <div class="bg-yellow-200 p-3 rounded-lg shadow-md mb-6">
+                        <p class="text-xl font-extrabold text-black mb-1">${successRank > 0 && successRank <= 50 ? `🎉通關成功順位：第 ${successRank} 名 / 50 名` : `⏱️成功通關！但任務逾時`}</p>
+                        <p class="text-sm text-green-700 font-bold">今日第 ${rank} 位挑戰玩家!</p>
+                    </div>
+                    <p class="mt-6 text-xl">但是沒想到你來的太晚了，只剩下⋯⋯</p>
+                    <img src="LATE_IMAGE.png" onerror="this.onerror=null; this.src='https://placehold.co/200x150/FFD700/000?text=LATE';" class="mx-auto w-3/4 max-w-sm object-contain my-6 shadow-lg">
+                    <p class="mt-4 text-2xl font-bold p-3 bg-yellow-300 rounded-lg mb-6"><strong>請到簽到處領取獎項！</strong></p>
+                </div>
+            `;
+
+            contentDiv.innerHTML = finalHtml;
+
+            // 插入分享按鈕 (位於排行榜上方)
+            const shareBtn = document.createElement('button');
+            shareBtn.textContent = "📸 產生戰果分享圖";
+            shareBtn.className = 'gold-button bg-yellow-500 hover:bg-yellow-600 text-gray-900 px-6 py-3 rounded-lg w-full font-bold mb-8 transition-all active:scale-95';
+            shareBtn.onclick = () => generateShareImage(timeRank, totalRecords);
+            contentDiv.appendChild(shareBtn);
+
+            // 插入排行榜
+            const leaderboardContainer = document.createElement('div');
+            leaderboardContainer.innerHTML = renderLeaderboard(topTenRanks);
+            contentDiv.appendChild(leaderboardContainer);
+        }
+
+        // --- 📸 分享圖片產生邏輯 ---
+        let lastGeneratedBlob = null;
+
+        async function generateShareImage(tRank, total) {
+            showMessage("正在下載加密字體與繪製戰果圖...", false);
+            
+            // 關鍵修正：確保 Canvas 繪圖前字體已加載
+            try {
+                await document.fonts.ready;
+            } catch (e) {
+                console.log("Font load check failed, proceeding anyway.");
+            }
+
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = 1080;
+            canvas.height = 1920;
+
+            const bgImg = new Image();
+            bgImg.crossOrigin = "anonymous";
+            bgImg.src = "stories.jpg";
+
+            bgImg.onload = () => {
+                drawShareCanvasContent(ctx, bgImg, tRank, total, canvas);
+            };
+
+            bgImg.onerror = () => {
+                // 測試模擬背景
+                ctx.fillStyle = "#1a1a2e";
+                ctx.fillRect(0, 0, 1080, 1920);
+                drawShareCanvasContent(ctx, null, tRank, total, canvas);
+            };
+        }
+
+        function drawShareCanvasContent(ctx, img, tRank, total, canvas) {
+            if (img) ctx.drawImage(img, 0, 0, 1080, 1920);
+
+            ctx.textAlign = "center";
+            const maxTextWidth = 880; // 1080 - 100 - 100 = 880px 保留左右各 100px 距離
+            
+            // 重新分佈文字，維持相等垂直間距 (Gap: 150px)
+            // L1 從 450px 上移 20px -> 430px
+            // L2 = 430 + 150 = 580px
+            // L3 = 580 + 150 = 730px
+            
+            // 設定字體：優先 Special Elite (英數)，備選 Noto Serif TC (中文宋體)
+            const shareFont = "bold 85px 'Special Elite', 'Noto Serif TC', serif";
+            const shareFontSmall = "bold 65px 'Special Elite', 'Noto Serif TC', serif";
+            
+            // 1. 特工代號
+            ctx.fillStyle = "#FFFFFF";
+            ctx.font = shareFont;
+            ctx.fillText(`特工代號：${playerName}`, 540, 430, maxTextWidth); 
+
+            // 2. 金庫破解耗時 (間隔 150px)
+            ctx.fillStyle = "#fbbf24"; 
+            ctx.font = shareFont; 
+            ctx.fillText(`金庫破解耗時：${completionTime} 秒`, 540, 580, maxTextWidth);
+
+            // 3. 最速懸賞榜 (間隔 150px)
+            ctx.fillStyle = "#FFFFFF";
+            ctx.font = shareFontSmall;
+            const rankDisplay = (tRank && tRank !== 'N/A' && total !== 'N/A') ? `No. ${tRank} / ${total}` : "MISSION SUCCESS";
+            ctx.fillText(`最速懸賞榜：${rankDisplay}`, 540, 730, maxTextWidth);
+
+            const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
+            const modal = document.getElementById('image-modal');
+            const preview = document.getElementById('modal-canvas-preview');
+            preview.src = dataUrl;
+            modal.style.display = "flex";
+
+            document.getElementById('web-share-btn').style.display = navigator.share ? "block" : "none";
+            canvas.toBlob(blob => { lastGeneratedBlob = blob; }, "image/jpeg", 0.9);
+        }
+
+        function closeImageModal() {
+            document.getElementById('image-modal').style.display = "none";
+        }
+
+        async function shareViaWebAPI() {
+            if (!lastGeneratedBlob) return;
+            const file = new File([lastGeneratedBlob], "result.jpg", { type: "image/jpeg" });
+            try {
+                await navigator.share({
+                    files: [file],
+                    title: '黑色追緝令：戰果回報',
+                    text: `我以特工代號【${playerName}】完成任務！`
+                });
+            } catch (err) {
+                console.log("分享取消");
+            }
+        }
+
+        function gameOver() {
+            currentState = GAME_STATE.FAIL; clearScreen(); stopTimer(); window.scrollTo(0, 0);
+            container.className = 'bg-red-900 text-white p-6 md:p-10 rounded-xl shadow-2xl max-w-lg w-full transition-all duration-500 border-4 border-red-700';
+            contentDiv.innerHTML = `<div class="text-center"><h2 class="text-4xl md:text-5xl font-extrabold text-red-400 mt-4">行動失敗！</h2><p class="mt-6 text-xl">換班的保鏢已經到達，你被抓個正著。金幣夢碎！</p><p class="mt-4">下次準備更充分再來吧。</p></div>`;
+            renderButton("重新開始", () => location.reload()); 
+        }
+
+        window.onload = initGame;
+    </script>
+</body>
+</html>
         /* 使用 Inter 和 Noto Sans TC 確保中英文字體美觀 */
         body {
             font-family: 'Noto Sans TC', 'Inter', sans-serif;
