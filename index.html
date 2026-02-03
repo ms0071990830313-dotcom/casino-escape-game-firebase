@@ -6,9 +6,9 @@
     <title>黑色追緝令：賭場風雲</title>
     <!-- 載入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=Noto+Sans+TC:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=Noto+Sans+TC:wght@400;700&family=Special+Elite&display=swap" rel="stylesheet">
     <style>
-        /* 使用 Inter 和 Noto Sans TC 確保中英文字體美觀 */
+        /* 使用 Inter 和 Noto Sans TC 確保中英文字體美觀，Special Elite 用於分享圖 */
         body {
             font-family: 'Noto Sans TC', 'Inter', sans-serif;
             background-color: #1a1a2e; /* 深色背景, 符合黑幫主題 */
@@ -289,7 +289,7 @@
             },
             {
                 speaker: 'BOSS',
-                text: `現在，你趁保鏢在打瞌睡，已經偷偷潛入到了賭場的金庫位置。<br>噓！小心不要被發現！<br><span class="text-yellow-400 font-bold">十分鐘內</span>你必須解出這個謎題，不然換班的人就要來了，你會稱個正著！<br>仔細查看金庫在哪裡？還有密碼，你需要知道密碼是幾位數。`,
+                text: `現在，你趁保鏢在打瞌睡，已經偷偷潛入到了賭場的金庫位置。<br>噓！小心不要被發現！<br><span class="text-yellow-400 font-bold">十分鐘內</span>你必須解出這個謎題，不然換班的人就要來了，你會被抓個正著！<br>仔細查看金庫在哪裡？還有密碼，你需要知道密碼是幾位數。`,
                 buttonText: "偷偷潛入金庫",
                 action: 'START_MISSION'
             }
@@ -758,23 +758,24 @@
             ctx.textAlign = "center";
             const maxTextWidth = 880; // 1080 - 100 - 100 = 880px 保留左右各 100px 距離
             
-            // 重新分佈文字，精確填補 230px 到 700px 區間，避開 780px 以後的圖案
+            // 重新分佈文字，精確填補 230px 到 700px 區間
+            // 字體更換為 'Special Elite' (打字機質感) 搭配 Noto Sans TC
             
-            // 1. 代號 (設為 300px，頂部約落在 230px 附近)
+            // 1. 代號 (設為 350px)
             ctx.fillStyle = "#FFFFFF";
-            ctx.font = "bold 90px 'Noto Sans TC'";
-            ctx.fillText(`成員代號：${playerName}`, 540, 300, maxTextWidth); 
+            ctx.font = "bold 85px 'Special Elite', 'Noto Sans TC'";
+            ctx.fillText(`特工代號：${playerName}`, 540, 350, maxTextWidth); 
 
             // 2. 耗時 (約在 500px)
             ctx.fillStyle = "#fbbf24"; 
-            ctx.font = "bold 100px 'Inter'"; 
-            ctx.fillText(`通關時間：${completionTime} SECS`, 540, 500, maxTextWidth);
+            ctx.font = "bold 95px 'Special Elite', 'Inter'"; 
+            ctx.fillText(`金庫破解耗時：${completionTime} 秒`, 540, 500, maxTextWidth);
 
-            // 3. 通關排行榜 (設為 700px，確保整體低於 780px)
+            // 3. 通關排行榜 (設為 700px，加入總參與人數顯示)
             ctx.fillStyle = "#FFFFFF";
-            ctx.font = "bold 70px 'Noto Sans TC'";
-            const rankText = (tRank && tRank !== 'N/A' && total !== 'N/A') ? `通關排行榜：${tRank} / ${total}` : "任務通關成功！";
-            ctx.fillText(rankText, 540, 700, maxTextWidth);
+            ctx.font = "bold 65px 'Special Elite', 'Noto Sans TC'";
+            const rankDisplay = (tRank && tRank !== 'N/A' && total !== 'N/A') ? `No. ${tRank} / ${total}` : "MISSION SUCCESS";
+            ctx.fillText(`最速懸賞榜：${rankDisplay}`, 540, 700, maxTextWidth);
 
             const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
             const modal = document.getElementById('image-modal');
@@ -797,7 +798,7 @@
                 await navigator.share({
                     files: [file],
                     title: '黑色追緝令：戰果回報',
-                    text: `我以代號【${playerName}】完成任務！`
+                    text: `我以特工代號【${playerName}】完成任務！`
                 });
             } catch (err) {
                 console.log("分享取消");
