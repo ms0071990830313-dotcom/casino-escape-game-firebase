@@ -8,11 +8,19 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=Noto+Sans+TC:wght@400;700&family=Special+Elite&display=swap" rel="stylesheet">
     <style>
-        /* 使用 Inter 和 Noto Sans TC 確保中英文字體美觀，Special Elite 用於分享圖 */
+        /* 使用 Inter 和 Noto Sans TC 確保中英文字體美觀 */
         body {
             font-family: 'Noto Sans TC', 'Inter', sans-serif;
             background-color: #1a1a2e; /* 深色背景, 符合黑幫主題 */
             overflow-x: hidden;
+        }
+        /* 強制載入字體的小技巧，確保 Canvas 能抓到 */
+        .font-preload {
+            font-family: 'Special Elite';
+            position: absolute;
+            top: -9999px;
+            left: -9999px;
+            opacity: 0;
         }
         .text-shadow-custom {
             text-shadow: 0 0 5px rgba(255, 215, 0, 0.5), 0 0 10px rgba(255, 215, 0, 0.3);
@@ -199,6 +207,10 @@
     </script>
 </head>
 <body class="min-h-screen flex items-center justify-center p-4">
+
+    <!-- 隱藏元素，強迫瀏覽器下載字體 -->
+    <div class="font-preload" style="font-family: 'Special Elite';">Font Preloader</div>
+    <div class="font-preload" style="font-family: 'Noto Sans TC';">字體預載</div>
 
     <!-- 3D 啟動頁面 -->
     <div id="launch-page">
@@ -730,7 +742,15 @@
         let lastGeneratedBlob = null;
 
         async function generateShareImage(tRank, total) {
-            showMessage("正在繪製戰果圖...", false);
+            showMessage("正在下載加密字體與繪製戰果圖...", false);
+            
+            // 關鍵修正：確保 Canvas 繪圖前字體已加載
+            try {
+                await document.fonts.ready;
+            } catch (e) {
+                console.log("Font load check failed, proceeding anyway.");
+            }
+
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
             canvas.width = 1080;
@@ -758,24 +778,24 @@
             ctx.textAlign = "center";
             const maxTextWidth = 880; // 1080 - 100 - 100 = 880px 保留左右各 100px 距離
             
-            // 重新分佈文字，精確填補 230px 到 700px 區間
-            // 字體更換為 'Special Elite' (打字機質感) 搭配 Noto Sans TC
+            // 重新分佈文字，維持相等垂直間距 (Gap: 150px)
+            // L1: 450px, L2: 600px, L3: 750px
             
-            // 1. 代號 (設為 350px)
+            // 1. 特工代號
             ctx.fillStyle = "#FFFFFF";
             ctx.font = "bold 85px 'Special Elite', 'Noto Sans TC'";
-            ctx.fillText(`特工代號：${playerName}`, 540, 350, maxTextWidth); 
+            ctx.fillText(`特工代號：${playerName}`, 540, 450, maxTextWidth); 
 
-            // 2. 耗時 (約在 500px)
+            // 2. 金庫破解耗時 (間隔 150px)
             ctx.fillStyle = "#fbbf24"; 
             ctx.font = "bold 95px 'Special Elite', 'Inter'"; 
-            ctx.fillText(`金庫破解耗時：${completionTime} 秒`, 540, 500, maxTextWidth);
+            ctx.fillText(`金庫破解耗時：${completionTime} 秒`, 540, 600, maxTextWidth);
 
-            // 3. 通關排行榜 (設為 700px，加入總參與人數顯示)
+            // 3. 最速懸賞榜 (間隔 150px)
             ctx.fillStyle = "#FFFFFF";
             ctx.font = "bold 65px 'Special Elite', 'Noto Sans TC'";
             const rankDisplay = (tRank && tRank !== 'N/A' && total !== 'N/A') ? `No. ${tRank} / ${total}` : "MISSION SUCCESS";
-            ctx.fillText(`最速懸賞榜：${rankDisplay}`, 540, 700, maxTextWidth);
+            ctx.fillText(`最速懸賞榜：${rankDisplay}`, 540, 750, maxTextWidth);
 
             const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
             const modal = document.getElementById('image-modal');
