@@ -15,6 +15,10 @@
             background-color: #1a1a2e; /* 深色背景, 符合黑幫主題 */
             overflow-x: hidden;
         }
+        /* 定義標題專用字體 (與限動圖一致) */
+        .title-font {
+            font-family: 'Noto Serif TC', serif;
+        }
         /* 強制載入字體的小技巧，確保 Canvas 能抓到 */
         .font-preload {
             font-family: 'Special Elite', 'Noto Serif TC';
@@ -261,8 +265,10 @@
     </audio>
 
     <div id="game-container" class="bg-gray-800 text-white p-6 md:p-10 rounded-xl shadow-2xl max-w-lg w-full transition-all duration-500">
-        <h1 class="text-3xl md:text-4xl font-bold text-center mb-6 text-yellow-400 text-shadow-custom">
-            黑色追緝令：賭場風雲
+        <!-- 標題調整：改用 title-font，設定兩行，並增加行距至 1.5 -->
+        <h1 class="title-font text-3xl md:text-4xl font-bold text-center mb-6 text-yellow-400 text-shadow-custom flex flex-col items-center leading-[1.5]">
+            <span>黑色追緝令</span>
+            <span class="text-[0.9em]">賭場風雲</span>
         </h1>
 
         <div id="timer-display" class="text-center text-xl font-mono p-2 mb-4 rounded-lg bg-red-800 text-yellow-300 shadow-inner hidden"></div>
@@ -317,7 +323,7 @@
             },
             {
                 speaker: 'BOSS',
-                text: `現在，你趁保鏢在打瞌睡，已經偷偷潛入到了賭場的金庫位置。<br>噓！小心不要被發現！<br><span class="text-yellow-400 font-bold">十分鐘內</span>你必須解出這個謎題，不然換班的人就要來了，你會被抓個正著！<br>仔細查看金庫在哪裡？還有密碼，你需要知道密碼是幾位數。`,
+                text: `現在，你趁保鏢在打瞌睡，已經偷偷潛入到了賭場的金庫位置。<br>噓！小心不要被發現！<br><span class="text-yellow-400 font-bold">十分鐘內</span>你必須解出這個謎題，不然換班的人就要來了，你會被抓個正著！<br>仔細查看金庫在哪裡？還有密碼，你需要知道密碼是幾位數.`,
                 buttonText: "偷偷潛入金庫",
                 action: 'START_MISSION'
             }
@@ -350,7 +356,6 @@
         // 行動裝置音訊解鎖小工具
         function unlockAudio(audio) {
             if (!audio) return;
-            // 嘗試播放然後立即暫停
             const playPromise = audio.play();
             if (playPromise !== undefined) {
                 playPromise.then(_ => {
@@ -395,7 +400,6 @@
                     return;
                 }
 
-                // --- 重要！在使用者點擊的當下，解鎖所有音軌 ---
                 startBGM();
                 unlockAudio(successSound);
                 unlockAudio(lateSound);
@@ -558,7 +562,8 @@
                 const sortedByTime = [...allTodayDocs].sort((a, b) => a.completionTime - b.completionTime);
                 const timeRank = sortedByTime.findIndex(d => d.id === docRef.id) + 1;
 
-                const topTenRanks = sortedByTime.slice(0, 50).map((data, index) => ({
+                // 修改：移除 .slice(0, 50)，顯示所有人的排名
+                const topTenRanks = sortedByTime.map((data, index) => ({
                     rank: index + 1, name: data.name || "神秘特工", time: formatTime(data.completionTime || 0), isPlayer: data.userId === uid
                 }));
                 
@@ -569,7 +574,7 @@
         function renderLeaderboard(ranks) {
             if (!ranks || ranks.length === 0) return `<p class="text-center p-4 text-gray-500">目前沒有排名紀錄。</p>`;
             let tableRows = ranks.map(rank => `<tr class="${rank.isPlayer ? 'bg-yellow-400 text-gray-900 font-extrabold shadow-md' : 'bg-gray-700 text-gray-200'} transition hover:bg-yellow-200"><td class="p-2 text-center rounded-l-lg">${rank.rank}</td><td class="p-2 font-semibold">${rank.name}</td><td class="p-2 text-right rounded-r-lg font-mono">${rank.time}</td></tr>`).join('');
-            return `<div class="mt-8 pt-4 border-t border-yellow-600"><h3 class="text-2xl font-bold text-yellow-500 mb-4 text-center">今日最速黑幫 (Top 50)</h3><div class="w-full max-w-sm mx-auto bg-gray-900 rounded-lg overflow-hidden"><div class="max-h-96 overflow-y-auto custom-scrollbar p-1"><table class="leaderboard-table w-full text-sm"><thead><tr class="text-gray-400 sticky top-0 bg-gray-900 z-10"><th class="p-2 w-1/6 text-center">排名</th><th class="p-2 w-3/6 text-left">化名</th><th class="p-2 w-2/6 text-right">耗時</th></tr></thead><tbody>${tableRows}</tbody></table></div></div><p class="text-center text-xs text-gray-500 mt-2">滑動上方列表查看更多排名</p></div>`;
+            return `<div class="mt-8 pt-4 border-t border-yellow-600"><h3 class="text-2xl font-bold text-yellow-500 mb-4 text-center">今日最速黑幫全榜單</h3><div class="w-full max-w-sm mx-auto bg-gray-900 rounded-lg overflow-hidden"><div class="max-h-96 overflow-y-auto custom-scrollbar p-1"><table class="leaderboard-table w-full text-sm"><thead><tr class="text-gray-400 sticky top-0 bg-gray-900 z-10"><th class="p-2 w-1/6 text-center">排名</th><th class="p-2 w-3/6 text-left">化名</th><th class="p-2 w-2/6 text-right">耗時</th></tr></thead><tbody>${tableRows}</tbody></table></div></div><p class="text-center text-xs text-gray-500 mt-2">滑動上方列表查看更多排名</p></div>`;
         }
 
         function displayNextDialogue() {
@@ -719,9 +724,9 @@
             contentDiv.innerHTML = `<div class="text-center py-10"><h2 class="text-3xl font-bold text-yellow-400 mb-4 text-shadow-custom">正在回報戰果並計算排名...</h2><div class="animate-spin rounded-full h-12 w-12 border-b-2 border-yellow-500 mx-auto mt-6"></div></div>`;
             try {
                 const result = await recordCompletionAndShowRank();
+                // 這裡邏輯維持 successRank <= 50 作為成功判斷 (即便榜單全顯示)
                 const isGrandSuccess = (completionTime < INITIAL_TIME_SECONDS) && (result.successRank > 0 && result.successRank <= 50);
                 
-                // 在這裡直接呼叫 play()，因為這雖然在 async 後，但在某些瀏覽器中若之前解鎖過則可行
                 if (isGrandSuccess) { 
                     if (successSound) successSound.play().catch(e => console.log(e)); 
                     goToSuccess(result.rank, result.successRank, result.timeRank, result.totalRecords, result.topTenRanks); 
@@ -801,12 +806,16 @@
         let lastGeneratedBlob = null;
 
         async function generateShareImage(tRank, total) {
-            showMessage("正在下載加密字體與繪製戰果圖...", false);
+            showMessage("正在準備特工文件與加密字體...", false);
             
             try {
-                await document.fonts.ready;
+                await Promise.all([
+                    document.fonts.load("bold 77px 'Special Elite'"),
+                    document.fonts.load("bold 77px 'Noto Serif TC'"),
+                    document.fonts.ready
+                ]);
             } catch (e) {
-                console.log("Font load check failed.");
+                console.log("字體預載失敗，嘗試繼續繪製。");
             }
 
             const canvas = document.createElement('canvas');
@@ -819,7 +828,9 @@
             bgImg.src = "stories.jpg";
 
             bgImg.onload = () => {
-                drawShareCanvasContent(ctx, bgImg, tRank, total, canvas);
+                setTimeout(() => {
+                    drawShareCanvasContent(ctx, bgImg, tRank, total, canvas);
+                }, 100);
             };
 
             bgImg.onerror = () => {
