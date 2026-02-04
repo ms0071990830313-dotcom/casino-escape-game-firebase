@@ -19,13 +19,14 @@
         .title-font {
             font-family: 'Noto Serif TC', serif;
         }
-        /* 強制載入字體的小技巧，確保 Canvas 能抓到 */
+        /* 強制載入字體的小技巧 */
         .font-preload {
             font-family: 'Special Elite', 'Noto Serif TC';
             position: absolute;
             top: -9999px;
             left: -9999px;
             opacity: 0;
+            white-space: pre; /* 確保內容不會被摺疊 */
         }
         .text-shadow-custom {
             text-shadow: 0 0 5px rgba(255, 215, 0, 0.5), 0 0 10px rgba(255, 215, 0, 0.3);
@@ -67,9 +68,9 @@
         }
         /* 倒數剩下 2 分鐘時的放大效果 */
         .timer-large {
-            font-size: 1.5rem; /* 變大 */
-            padding: 0.75rem; /* 增加內邊距 */
-            border: 3px solid #ffeb3b; /* 增加邊框強調 */
+            font-size: 1.5rem; 
+            padding: 0.75rem; 
+            border: 3px solid #ffeb3b; 
             box-shadow: 0 0 15px rgba(255, 215, 0, 0.7);
             transition: all 0.3s ease-in-out;
         }
@@ -95,7 +96,7 @@
         /* 排行榜表格樣式 */
         .leaderboard-table {
             border-collapse: separate;
-            border-spacing: 0 5px; /* 增加行間距 */
+            border-spacing: 0 5px; 
         }
         .leaderboard-table td {
             padding: 8px;
@@ -178,7 +179,7 @@
     <!-- 引入 Firebase SDK -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, serverTimestamp, query, where, orderBy, getDocs, Timestamp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         
         const firebaseConfig = {
@@ -198,7 +199,7 @@
         window.isAuthReady = false;
 
         setLogLevel('error');
-
+        
         onAuthStateChanged(window.auth, (user) => {
             if (user) {
                 window.currentUserId = user.uid;
@@ -208,13 +209,13 @@
             window.isAuthReady = true;
         });
         
-        window.fs = { collection, addDoc, serverTimestamp, query, where, orderBy, getDocs, Timestamp, signInAnonymously, signInWithCustomToken };
+        window.fs = { collection, addDoc, serverTimestamp, query, where, orderBy, getDocs, Timestamp, signInAnonymously };
     </script>
 </head>
 <body class="min-h-screen flex items-center justify-center p-4">
 
     <!-- 隱藏元素，強迫瀏覽器下載字體 -->
-    <div class="font-preload">Special Elite and Noto Serif TC Loading...</div>
+    <div class="font-preload" id="font-preloader-text">Special Elite and Noto Serif TC Loading...</div>
 
     <!-- 3D 啟動頁面 -->
     <div id="launch-page">
@@ -222,7 +223,6 @@
             <img id="launch-logo" src="name.png" onerror="this.onerror=null; this.src='https://placehold.co/400x400/29294F/FFF?text=黑色追緝令';" alt="遊戲標題圖">
         </div>
         
-        <!-- 前置確認勾選框 -->
         <div id="launch-check-area" class="mt-8 space-y-3 text-left text-gray-200 bg-black/40 p-4 rounded-lg border border-yellow-500/30">
             <label class="flex items-center space-x-3 cursor-pointer">
                 <input type="checkbox" id="launch-check-network" class="form-checkbox h-5 w-5 text-yellow-500 bg-gray-700 border-gray-500 rounded focus:ring-0">
@@ -265,7 +265,7 @@
     </audio>
 
     <div id="game-container" class="bg-gray-800 text-white p-6 md:p-10 rounded-xl shadow-2xl max-w-lg w-full transition-all duration-500">
-        <!-- 標題調整：改用 title-font，設定兩行，並增加行距至 1.5 -->
+        <!-- 標題調整：兩行字、1.5 倍行距、Noto Serif TC 字體、第二行縮小 10% -->
         <h1 class="title-font text-3xl md:text-4xl font-bold text-center mb-6 text-yellow-400 text-shadow-custom flex flex-col items-center leading-[1.5]">
             <span>黑色追緝令</span>
             <span class="text-[0.9em]">賭場風雲</span>
@@ -308,7 +308,6 @@
         let completionTime = 0;
         let hintsRevealed = 0; 
         let currentDialogueStep = 0; 
-        let currentSuccessRank = 'N/A';
         
         let container, contentDiv, controlsDiv, messageArea, timerDisplay, bgm, successSound, lateSound, gunLoadingSound;
 
@@ -353,22 +352,22 @@
             }
         }
 
-        // 優化解鎖邏輯，強制靜音且不等待 Promise，防止聲音洩漏或背景播放
+        // 行動裝置音訊解鎖（靜音熱身版，解決洩漏短促雜音）
         function unlockAudio(audio) {
             if (!audio) return;
-            audio.muted = true; // 強制設為靜音，這樣就算它播完了也沒聲音
-            try {
-                const p = audio.play();
-                if (p !== undefined) {
-                    p.then(() => {
-                        audio.pause();
-                        audio.currentTime = 0;
-                    }).catch(() => {});
-                } else {
+            const originalMuted = audio.muted;
+            audio.muted = true;
+            const playPromise = audio.play();
+            if (playPromise !== undefined) {
+                playPromise.then(_ => {
                     audio.pause();
                     audio.currentTime = 0;
-                }
-            } catch (e) {}
+                    audio.muted = originalMuted;
+                }).catch(e => {
+                    audio.muted = originalMuted;
+                    console.log("Audio unlock bypassed.");
+                });
+            }
         }
 
         function showLaunchPage() {
@@ -380,9 +379,9 @@
 
             const handleCheckboxClick = () => {
                 if (gunLoadingSound) {
-                    gunLoadingSound.muted = false; // 勾選時是唯一允許出聲的時刻
+                    gunLoadingSound.muted = false;
                     gunLoadingSound.currentTime = 0;
-                    gunLoadingSound.play().catch(() => {});
+                    gunLoadingSound.play().catch(e => {});
                 }
             };
 
@@ -405,14 +404,12 @@
                     return;
                 }
 
-                // 在此處解除 BGM 靜音並播放
+                // 啟動 BGM 並預先解鎖音軌
                 if (bgm) {
                     bgm.muted = false;
                     bgm.volume = 0.5;
-                    bgm.play().catch(() => {});
+                    bgm.play().catch(e => {});
                 }
-
-                // 其他特效音軌僅執行靜音解鎖，不發聲
                 unlockAudio(successSound);
                 unlockAudio(lateSound);
                 unlockAudio(gunLoadingSound);
@@ -541,7 +538,7 @@
 
         function getPublicRanksCollectionRef() {
             if (!db || !APP_ID) return null;
-            return fs.collection(db, 'artifacts', window.APP_ID, 'public', 'data', 'puzzle_ranks');
+            return fs.collection(db, `artifacts/${window.APP_ID}/public/data/puzzle_ranks`);
         }
 
         async function recordCompletionAndShowRank() {
@@ -567,19 +564,19 @@
                 const sortedByTime = [...allTodayDocs].sort((a, b) => a.completionTime - b.completionTime);
                 const timeRank = sortedByTime.findIndex(d => d.id === docRef.id) + 1;
 
-                // 顯示全榜單
-                const topTenRanks = sortedByTime.map((data, index) => ({
+                // 完整排行榜列表
+                const allRanks = sortedByTime.map((data, index) => ({
                     rank: index + 1, name: data.name || "神秘特工", time: formatTime(data.completionTime || 0), isPlayer: data.userId === uid
                 }));
                 
-                return { rank, successRank: successRank > 0 ? successRank : 'N/A', timeRank, totalRecords: allTodayDocs.length, topTenRanks };
+                return { rank, successRank: successRank > 0 ? successRank : 'N/A', timeRank, totalRecords: allTodayDocs.length, allRanks };
             } catch (e) { return defaultResult; }
         }
 
         function renderLeaderboard(ranks) {
             if (!ranks || ranks.length === 0) return `<p class="text-center p-4 text-gray-500">目前沒有排名紀錄。</p>`;
             let tableRows = ranks.map(rank => `<tr class="${rank.isPlayer ? 'bg-yellow-400 text-gray-900 font-extrabold shadow-md' : 'bg-gray-700 text-gray-200'} transition hover:bg-yellow-200"><td class="p-2 text-center rounded-l-lg">${rank.rank}</td><td class="p-2 font-semibold">${rank.name}</td><td class="p-2 text-right rounded-r-lg font-mono">${rank.time}</td></tr>`).join('');
-            return `<div class="mt-8 pt-4 border-t border-yellow-600"><h3 class="text-2xl font-bold text-yellow-500 mb-4 text-center">今日最速黑幫全榜單</h3><div class="w-full max-w-sm mx-auto bg-gray-900 rounded-lg overflow-hidden"><div class="max-h-96 overflow-y-auto custom-scrollbar p-1"><table class="leaderboard-table w-full text-sm"><thead><tr class="text-gray-400 sticky top-0 bg-gray-900 z-10"><th class="p-2 w-1/6 text-center">排名</th><th class="p-2 w-3/6 text-left">化名</th><th class="p-2 w-2/6 text-right">耗時</th></tr></thead><tbody>${tableRows}</tbody></table></div></div><p class="text-center text-xs text-gray-500 mt-2">滑動上方列表查看更多排名</p></div>`;
+            return `<div class="mt-8 pt-4 border-t border-yellow-600"><h3 class="text-2xl font-bold text-yellow-500 mb-4 text-center">今日黑幫最速全榜單</h3><div class="w-full max-w-sm mx-auto bg-gray-900 rounded-lg overflow-hidden"><div class="max-h-96 overflow-y-auto custom-scrollbar p-1"><table class="leaderboard-table w-full text-sm"><thead><tr class="text-gray-400 sticky top-0 bg-gray-900 z-10"><th class="p-2 w-1/6 text-center">排名</th><th class="p-2 w-3/6 text-left">化名</th><th class="p-2 w-2/6 text-right">耗時</th></tr></thead><tbody>${tableRows}</tbody></table></div></div><p class="text-center text-xs text-gray-500 mt-2">滑動上方列表查看所有挑戰者</p></div>`;
         }
 
         function displayNextDialogue() {
@@ -609,7 +606,7 @@
             contentDiv.innerHTML = `<div class="text-center space-y-6"><p class="text-lg text-gray-300">一場秘密行動即將展開...</p><img src="cover.jpg" onerror="this.onerror=null; this.src='https://placehold.co/400x200/29294F/FFF?text=起始畫面圖片';" class="mx-auto w-full max-w-sm rounded-lg shadow-xl border-2 border-yellow-500 object-cover"></div>`;
             
             const initialButton = renderButton("進入秘密任務", () => {
-                if (window.auth && !window.auth.currentUser) fs.signInAnonymously(window.auth); 
+                if (window.auth && !window.auth.currentUser) fs.signInAnonymously(auth); 
                 goToBossSelection();
             }, 'initial-start-button');
             
@@ -648,7 +645,13 @@
                     const snap = await fs.getDocs(getPublicRanksCollectionRef());
                     if (snap.docs.some(doc => doc.data().name === trimmedName && doc.data().timestamp?.toDate() >= todayStart)) {
                         showMessage("你的代號已被使用，請更換一個。", true); button.disabled = false; button.textContent = "確認代號";
-                    } else { playerName = trimmedName; showMessage(`代號：${playerName}，確認！`); setTimeout(goToMissionDialogue, 1500); }
+                    } else { 
+                        playerName = trimmedName; 
+                        // 強化字體修復：將名字放入預載區，提早觸發瀏覽器下載宋體字圖
+                        document.getElementById('font-preloader-text').textContent += playerName;
+                        showMessage(`代號：${playerName}，確認！`); 
+                        setTimeout(goToMissionDialogue, 1500); 
+                    }
                 } catch (e) { showMessage("連線驗證失敗，請重試。", true); button.disabled = false; }
             }, 'codename-input', 10);
             document.getElementById('codename-input').focus();
@@ -724,30 +727,25 @@
         }
 
         async function handleFinalRanking() {
-            currentState = GAME_STATE.SUCCESS; 
-            bgm.pause(); stopTimer(); timerDisplay.classList.add('hidden'); clearScreen();
+            currentState = GAME_STATE.SUCCESS; bgm.pause(); stopTimer(); timerDisplay.classList.add('hidden'); clearScreen();
             contentDiv.innerHTML = `<div class="text-center py-10"><h2 class="text-3xl font-bold text-yellow-400 mb-4 text-shadow-custom">正在回報戰果並計算排名...</h2><div class="animate-spin rounded-full h-12 w-12 border-b-2 border-yellow-500 mx-auto mt-6"></div></div>`;
             try {
                 const result = await recordCompletionAndShowRank();
                 const isGrandSuccess = (completionTime < INITIAL_TIME_SECONDS) && (result.successRank > 0 && result.successRank <= 50);
                 
                 if (isGrandSuccess) { 
-                    if (successSound) {
-                        successSound.muted = false; // 正式出聲
-                        successSound.play().catch(e => console.log(e)); 
-                    }
-                    goToSuccess(result.rank, result.successRank, result.timeRank, result.totalRecords, result.topTenRanks); 
+                    successSound.muted = false;
+                    successSound.play().catch(e => console.log(e)); 
+                    goToSuccess(result.rank, result.successRank, result.timeRank, result.totalRecords, result.allRanks); 
                 } else { 
-                    if (lateSound) {
-                        lateSound.muted = false; // 正式出聲
-                        lateSound.play().catch(e => console.log(e)); 
-                    }
-                    goToLateSuccess(result.rank, result.successRank, result.timeRank, result.totalRecords, result.topTenRanks); 
+                    lateSound.muted = false;
+                    lateSound.play().catch(e => console.log(e)); 
+                    goToLateSuccess(result.rank, result.successRank, result.timeRank, result.totalRecords, result.allRanks); 
                 }
             } catch (e) { goToLateSuccess('N/A', 'N/A', 'N/A', 'N/A', []); }
         }
 
-        function goToSuccess(rank, successRank, timeRank, totalRecords, topTenRanks) {
+        function goToSuccess(rank, successRank, timeRank, totalRecords, allRanks) {
             document.body.className = 'min-h-screen flex items-center justify-center p-4 success-bg';
             container.className = 'bg-yellow-100 text-gray-900 p-6 md:p-10 rounded-xl shadow-2xl max-w-lg w-full border-4 border-yellow-700';
             clearScreen();
@@ -766,7 +764,6 @@
                     <p class="mt-4 text-2xl font-bold p-3 bg-yellow-300 rounded-lg mb-6"><strong>請尋找頭頂箭頭的特工出示此畫面領取獎品！</strong></p>
                 </div>
             `;
-            
             contentDiv.innerHTML = finalHtml;
 
             const shareBtn = document.createElement('button');
@@ -776,11 +773,11 @@
             contentDiv.appendChild(shareBtn);
 
             const leaderboardContainer = document.createElement('div');
-            leaderboardContainer.innerHTML = renderLeaderboard(topTenRanks);
+            leaderboardContainer.innerHTML = renderLeaderboard(allRanks);
             contentDiv.appendChild(leaderboardContainer);
         }
 
-        function goToLateSuccess(rank, successRank, timeRank, totalRecords, topTenRanks) {
+        function goToLateSuccess(rank, successRank, timeRank, totalRecords, allRanks) {
             document.body.className = 'min-h-screen flex items-center justify-center p-4 success-bg';
             container.className = 'bg-yellow-100 text-gray-900 p-6 md:p-10 rounded-xl shadow-2xl max-w-lg w-full border-4 border-yellow-700';
             clearScreen();
@@ -799,7 +796,6 @@
                     <p class="mt-4 text-2xl font-bold p-3 bg-yellow-300 rounded-lg mb-6"><strong>請尋找頭頂箭頭的特工出示此畫面領取獎品！</strong></p>
                 </div>
             `;
-
             contentDiv.innerHTML = finalHtml;
 
             const shareBtn = document.createElement('button');
@@ -809,25 +805,34 @@
             contentDiv.appendChild(shareBtn);
 
             const leaderboardContainer = document.createElement('div');
-            leaderboardContainer.innerHTML = renderLeaderboard(topTenRanks);
+            leaderboardContainer.innerHTML = renderLeaderboard(allRanks);
             contentDiv.appendChild(leaderboardContainer);
         }
 
         let lastGeneratedBlob = null;
 
-        // --- 強化版字體載入與 Canvas 繪圖 ---
+        // --- 📸 強化版字體載入與 Canvas 繪圖：徹底解決字體不一問題 ---
         async function generateShareImage(tRank, total) {
-            showMessage("正在準備特工文件與加密字體...", false);
+            showMessage("正在解析特工指紋與加密字體...", false);
             
+            // 重要：包含玩家自定義代號的完整字串，強制瀏覽器載入該子集的宋體字圖
+            const dynamicText = `特工代號：${playerName}金庫破解耗時：${completionTime}秒No. /`;
+
             try {
-                // 1. 偵測特定權重的字體載入 (700 權重是我們需要的宋體粗體)
+                // 1. 強制指定 Noto Serif TC (700 權重) 以及化名中出現的特定文字
                 await Promise.all([
                     document.fonts.load("bold 77px 'Special Elite'"),
-                    document.fonts.load("700 77px 'Noto Serif TC'"), // 使用 700 明確匹配 CSS 中的權重
+                    document.fonts.load(`700 77px 'Noto Serif TC'`, dynamicText), 
                     document.fonts.ready
                 ]);
+
+                // 2. 離屏預渲染：在看不見的 Canvas 上先畫一次代號，強制喚醒渲染引擎字體快取
+                const dummyCanvas = document.createElement('canvas');
+                const dummyCtx = dummyCanvas.getContext('2d');
+                dummyCtx.font = "700 77px 'Noto Serif TC'";
+                dummyCtx.fillText(playerName, 0, 0); 
             } catch (e) {
-                console.log("字體偵測失敗。");
+                console.log("Font forcing failed, fallback applied.");
             }
 
             const canvas = document.createElement('canvas');
@@ -840,10 +845,10 @@
             bgImg.src = "stories.jpg";
 
             bgImg.onload = () => {
-                // 2. 額外給予 150ms 延時，讓瀏覽器渲染引擎「緩口氣」完成字體快取應用
+                // 3. 給予 250ms 的寬限期，確保瀏覽器字體渲染引擎同步完成
                 setTimeout(() => {
                     drawShareCanvasContent(ctx, bgImg, tRank, total, canvas);
-                }, 150);
+                }, 250);
             };
 
             bgImg.onerror = () => {
@@ -859,23 +864,22 @@
             ctx.textAlign = "center";
             const maxTextWidth = 880; 
             
-            // 3. 確保字體字串精確：優先英文 Special Elite，中文回退到 Noto Serif TC
-            // 在繪製每一行前「重新宣告」字體，防止 context 重置
-            const serifFontStr = "bold 77px 'Special Elite', 'Noto Serif TC', serif";
-            const serifFontSmallStr = "bold 65px 'Special Elite', 'Noto Serif TC', serif";
+            // 重要：在繪製每一行前，都宣告一次完整的 Font String
+            const serifFontFull = "bold 77px 'Special Elite', 'Noto Serif TC', serif";
+            const serifFontSmall = "bold 65px 'Special Elite', 'Noto Serif TC', serif";
             
-            // --- 行 1：特工代號 ---
-            ctx.font = serifFontStr;
+            // --- 1. 特工代號 ---
+            ctx.font = serifFontFull;
             ctx.fillStyle = "#FFFFFF";
             ctx.fillText(`特工代號：${playerName}`, 540, 380, maxTextWidth); 
 
-            // --- 行 2：耗時 (金黃色) ---
-            ctx.font = serifFontStr; // 再次宣告
+            // --- 2. 金庫破解耗時 ---
+            ctx.font = serifFontFull; // 重置宣告
             ctx.fillStyle = "#fbbf24"; 
             ctx.fillText(`金庫破解耗時：${completionTime} 秒`, 540, 555, maxTextWidth);
 
-            // --- 行 3：懸賞榜 ---
-            ctx.font = serifFontSmallStr; // 再次宣告
+            // --- 3. 最速懸賞榜 ---
+            ctx.font = serifFontSmall; // 重置宣告
             ctx.fillStyle = "#FFFFFF";
             const rankDisplay = (tRank && tRank !== 'N/A' && total !== 'N/A') ? `No. ${tRank} / ${total}` : "MISSION SUCCESS";
             ctx.fillText(`最速懸賞榜：${rankDisplay}`, 540, 730, maxTextWidth);
@@ -903,9 +907,7 @@
                     title: '黑色追緝令：戰果回報',
                     text: `我以特工代號【${playerName}】完成任務！`
                 });
-            } catch (err) {
-                console.log("分享取消");
-            }
+            } catch (err) { console.log("Share cancelled."); }
         }
 
         function gameOver() {
