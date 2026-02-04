@@ -247,16 +247,16 @@
     </div>
 
     <!-- 音效資源 -->
-    <audio id="bgm" loop>
+    <audio id="bgm" loop preload="auto">
         <source src="Mission Impossible Theme (Full Theme).mp3" type="audio/mp3">
     </audio>
-    <audio id="success-sound">
+    <audio id="success-sound" preload="auto">
         <source src="SUCCESS_Sound.mp3" type="audio/mp3">
     </audio>
-    <audio id="late-sound">
+    <audio id="late-sound" preload="auto">
         <source src="LATE_sound.mp4" type="audio/mp4">
     </audio>
-    <audio id="gun-loading-sound">
+    <audio id="gun-loading-sound" preload="auto">
         <source src="gun-loading.wav" type="audio/wav">
     </audio>
 
@@ -334,7 +334,6 @@
             lateSound = document.getElementById('late-sound');
             gunLoadingSound = document.getElementById('gun-loading-sound');
 
-            // 立即綁定啟動頁點擊事件
             showLaunchPage();
             
             db = window.db;
@@ -348,6 +347,21 @@
             }
         }
 
+        // 行動裝置音訊解鎖小工具
+        function unlockAudio(audio) {
+            if (!audio) return;
+            // 嘗試播放然後立即暫停
+            const playPromise = audio.play();
+            if (playPromise !== undefined) {
+                playPromise.then(_ => {
+                    audio.pause();
+                    audio.currentTime = 0;
+                }).catch(error => {
+                    console.log("音訊解鎖中...");
+                });
+            }
+        }
+
         function showLaunchPage() {
             const launchPage = document.getElementById('launch-page');
             const chkNetwork = document.getElementById('launch-check-network');
@@ -355,10 +369,9 @@
 
             if (!launchPage) return;
 
-            // 新增：當勾選確認項時播放槍聲特效
             const handleCheckboxClick = () => {
                 if (gunLoadingSound) {
-                    gunLoadingSound.currentTime = 0; // 重置時間以利快速連續點擊
+                    gunLoadingSound.currentTime = 0;
                     gunLoadingSound.play().catch(e => console.log("Sound play prevented: ", e));
                 }
             };
@@ -367,7 +380,6 @@
             if (chkVolume) chkVolume.onchange = handleCheckboxClick;
             
             launchPage.onclick = (e) => {
-                // 如果點擊的是勾選框或標籤文字，不執行畫面切換動作
                 if (e.target.type === 'checkbox' || e.target.tagName === 'LABEL' || e.target.tagName === 'SPAN') return;
 
                 const isReady = chkNetwork.checked && chkVolume.checked;
@@ -383,8 +395,11 @@
                     return;
                 }
 
-                // 修改：提前播放背景音樂
+                // --- 重要！在使用者點擊的當下，解鎖所有音軌 ---
                 startBGM();
+                unlockAudio(successSound);
+                unlockAudio(lateSound);
+                unlockAudio(gunLoadingSound);
 
                 launchPage.style.opacity = "0";
                 setTimeout(() => {
@@ -540,7 +555,6 @@
                 const qualifiers = sortedByEntry.filter(d => d.completionTime < INITIAL_TIME_SECONDS);
                 const successRank = qualifiers.findIndex(d => d.id === docRef.id) + 1;
                 
-                // 計算耗時排名
                 const sortedByTime = [...allTodayDocs].sort((a, b) => a.completionTime - b.completionTime);
                 const timeRank = sortedByTime.findIndex(d => d.id === docRef.id) + 1;
 
@@ -585,7 +599,6 @@
             contentDiv.innerHTML = `<div class="text-center space-y-6"><p class="text-lg text-gray-300">一場秘密行動即將展開...</p><img src="cover.jpg" onerror="this.onerror=null; this.src='https://placehold.co/400x200/29294F/FFF?text=起始畫面圖片';" class="mx-auto w-full max-w-sm rounded-lg shadow-xl border-2 border-yellow-500 object-cover"></div>`;
             
             const initialButton = renderButton("進入秘密任務", () => {
-                // 這裡拿掉 BGM 啟動，因為已提前在啟動頁執行
                 if (window.auth && !window.auth.currentUser) fs.signInAnonymously(auth); 
                 goToBossSelection();
             }, 'initial-start-button');
@@ -701,16 +714,19 @@
         }
 
         async function handleFinalRanking() {
-            currentState = GAME_STATE.SUCCESS; bgm.pause(); stopTimer(); timerDisplay.classList.add('hidden'); clearScreen();
+            currentState = GAME_STATE.SUCCESS; 
+            bgm.pause(); stopTimer(); timerDisplay.classList.add('hidden'); clearScreen();
             contentDiv.innerHTML = `<div class="text-center py-10"><h2 class="text-3xl font-bold text-yellow-400 mb-4 text-shadow-custom">正在回報戰果並計算排名...</h2><div class="animate-spin rounded-full h-12 w-12 border-b-2 border-yellow-500 mx-auto mt-6"></div></div>`;
             try {
                 const result = await recordCompletionAndShowRank();
                 const isGrandSuccess = (completionTime < INITIAL_TIME_SECONDS) && (result.successRank > 0 && result.successRank <= 50);
+                
+                // 在這裡直接呼叫 play()，因為這雖然在 async 後，但在某些瀏覽器中若之前解鎖過則可行
                 if (isGrandSuccess) { 
-                    successSound.play().catch(e => console.log(e)); 
+                    if (successSound) successSound.play().catch(e => console.log(e)); 
                     goToSuccess(result.rank, result.successRank, result.timeRank, result.totalRecords, result.topTenRanks); 
                 } else { 
-                    lateSound.play().catch(e => console.log(e)); 
+                    if (lateSound) lateSound.play().catch(e => console.log(e)); 
                     goToLateSuccess(result.rank, result.successRank, result.timeRank, result.totalRecords, result.topTenRanks); 
                 }
             } catch (e) { goToLateSuccess('N/A', 'N/A', 'N/A', 'N/A', []); }
@@ -721,7 +737,6 @@
             container.className = 'bg-yellow-100 text-gray-900 p-6 md:p-10 rounded-xl shadow-2xl max-w-lg w-full border-4 border-yellow-700';
             clearScreen();
             
-            // 頂部資訊區
             let finalHtml = `
                 <div class="text-center">
                     <h2 class="text-4xl md:text-5xl font-extrabold text-yellow-700 mt-4 animate-bounce">你成功打開金庫！</h2>
@@ -739,14 +754,12 @@
             
             contentDiv.innerHTML = finalHtml;
 
-            // 插入分享按鈕 (位於排行榜上方)
             const shareBtn = document.createElement('button');
             shareBtn.textContent = "📸 產生戰績分享圖";
             shareBtn.className = 'gold-button bg-yellow-500 hover:bg-yellow-600 text-gray-900 px-6 py-3 rounded-lg w-full font-bold mb-8 transition-all active:scale-95';
             shareBtn.onclick = () => generateShareImage(timeRank, totalRecords);
             contentDiv.appendChild(shareBtn);
 
-            // 插入排行榜
             const leaderboardContainer = document.createElement('div');
             leaderboardContainer.innerHTML = renderLeaderboard(topTenRanks);
             contentDiv.appendChild(leaderboardContainer);
@@ -757,7 +770,6 @@
             container.className = 'bg-yellow-100 text-gray-900 p-6 md:p-10 rounded-xl shadow-2xl max-w-lg w-full border-4 border-yellow-700';
             clearScreen();
 
-            // 頂部資訊區
             let finalHtml = `
                 <div class="text-center">
                     <h2 class="text-4xl md:text-5 font-extrabold text-yellow-700 mt-4 animate-bounce">你成功打開金庫！</h2>
@@ -775,30 +787,26 @@
 
             contentDiv.innerHTML = finalHtml;
 
-            // 插入分享按鈕 (位於排行榜上方)
             const shareBtn = document.createElement('button');
             shareBtn.textContent = "📸 產生戰果分享圖";
             shareBtn.className = 'gold-button bg-yellow-500 hover:bg-yellow-600 text-gray-900 px-6 py-3 rounded-lg w-full font-bold mb-8 transition-all active:scale-95';
             shareBtn.onclick = () => generateShareImage(timeRank, totalRecords);
             contentDiv.appendChild(shareBtn);
 
-            // 插入排行榜
             const leaderboardContainer = document.createElement('div');
             leaderboardContainer.innerHTML = renderLeaderboard(topTenRanks);
             contentDiv.appendChild(leaderboardContainer);
         }
 
-        // --- 📸 分享圖片產生邏輯 ---
         let lastGeneratedBlob = null;
 
         async function generateShareImage(tRank, total) {
             showMessage("正在下載加密字體與繪製戰果圖...", false);
             
-            // 確保 Canvas 繪圖前字體已加載
             try {
                 await document.fonts.ready;
             } catch (e) {
-                console.log("Font load check failed, proceeding anyway.");
+                console.log("Font load check failed.");
             }
 
             const canvas = document.createElement('canvas');
@@ -815,7 +823,6 @@
             };
 
             bgImg.onerror = () => {
-                // 測試模擬背景
                 ctx.fillStyle = "#1a1a2e";
                 ctx.fillRect(0, 0, 1080, 1920);
                 drawShareCanvasContent(ctx, null, tRank, total, canvas);
@@ -826,28 +833,19 @@
             if (img) ctx.drawImage(img, 0, 0, 1080, 1920);
 
             ctx.textAlign = "center";
-            const maxTextWidth = 880; // 左右各 100px 距離
+            const maxTextWidth = 880; 
             
-            // 重新分佈文字，維持相等垂直間距 (Gap: 175px)
-            // L1 從 430px 上移 50px -> 380px
-            // L2 = 380 + 175 = 555px
-            // L3 = 555 + 175 = 730px
-            
-            // 設定字體：第一、二行縮小 10% (原本 85px -> 77px)
             const shareFont = "bold 77px 'Special Elite', 'Noto Serif TC', serif";
             const shareFontSmall = "bold 65px 'Special Elite', 'Noto Serif TC', serif";
             
-            // 1. 特工代號
             ctx.fillStyle = "#FFFFFF";
             ctx.font = shareFont;
             ctx.fillText(`特工代號：${playerName}`, 540, 380, maxTextWidth); 
 
-            // 2. 金庫破解耗時
             ctx.fillStyle = "#fbbf24"; 
             ctx.font = shareFont; 
             ctx.fillText(`金庫破解耗時：${completionTime} 秒`, 540, 555, maxTextWidth);
 
-            // 3. 最速懸賞榜
             ctx.fillStyle = "#FFFFFF";
             ctx.font = shareFontSmall;
             const rankDisplay = (tRank && tRank !== 'N/A' && total !== 'N/A') ? `No. ${tRank} / ${total}` : "MISSION SUCCESS";
