@@ -178,10 +178,10 @@
     <!-- 引入 Firebase SDK -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, serverTimestamp, query, where, orderBy, getDocs, Timestamp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         
-        const firebaseConfig = {
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
             apiKey: "AIzaSyCR-oc58h8fmdqt-7VU1F9hstznu0l0vvQ",
             authDomain: "casini-game.firebaseapp.com",
             projectId: "casini-game",
@@ -193,11 +193,20 @@
         window.firebaseApp = initializeApp(firebaseConfig);
         window.db = getFirestore(window.firebaseApp);
         window.auth = getAuth(window.firebaseApp);
-        window.APP_ID = firebaseConfig.projectId;
+        window.APP_ID = typeof __app_id !== 'undefined' ? __app_id : firebaseConfig.projectId;
         window.currentUserId = null;
         window.isAuthReady = false;
 
         setLogLevel('error');
+
+        const initAuth = async () => {
+            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                await signInWithCustomToken(window.auth, __initial_auth_token);
+            } else {
+                await signInAnonymously(window.auth);
+            }
+        };
+        initAuth();
         
         onAuthStateChanged(window.auth, (user) => {
             if (user) {
@@ -353,16 +362,20 @@
             }
         }
 
-        // 行動裝置音訊解鎖小工具
+        // 修改：優化行動裝置音訊解鎖，避免解鎖時發出聲音
         function unlockAudio(audio) {
             if (!audio) return;
+            const originalMuted = audio.muted;
+            audio.muted = true; // 關鍵：先靜音再解鎖
             const playPromise = audio.play();
             if (playPromise !== undefined) {
                 playPromise.then(_ => {
                     audio.pause();
                     audio.currentTime = 0;
+                    audio.muted = originalMuted; // 解鎖完畢恢復
                 }).catch(error => {
-                    console.log("音訊解鎖中...");
+                    audio.muted = originalMuted;
+                    console.log("音訊解鎖略過。");
                 });
             }
         }
@@ -536,7 +549,7 @@
 
         function getPublicRanksCollectionRef() {
             if (!db || !APP_ID) return null;
-            return fs.collection(db, `artifacts/${window.APP_ID}/public/data/puzzle_ranks`);
+            return fs.collection(db, 'artifacts', window.APP_ID, 'public', 'data', 'puzzle_ranks');
         }
 
         async function recordCompletionAndShowRank() {
@@ -562,7 +575,6 @@
                 const sortedByTime = [...allTodayDocs].sort((a, b) => a.completionTime - b.completionTime);
                 const timeRank = sortedByTime.findIndex(d => d.id === docRef.id) + 1;
 
-                // 修改：移除 .slice(0, 50)，顯示所有人的排名
                 const topTenRanks = sortedByTime.map((data, index) => ({
                     rank: index + 1, name: data.name || "神秘特工", time: formatTime(data.completionTime || 0), isPlayer: data.userId === uid
                 }));
@@ -604,7 +616,6 @@
             contentDiv.innerHTML = `<div class="text-center space-y-6"><p class="text-lg text-gray-300">一場秘密行動即將展開...</p><img src="cover.jpg" onerror="this.onerror=null; this.src='https://placehold.co/400x200/29294F/FFF?text=起始畫面圖片';" class="mx-auto w-full max-w-sm rounded-lg shadow-xl border-2 border-yellow-500 object-cover"></div>`;
             
             const initialButton = renderButton("進入秘密任務", () => {
-                if (window.auth && !window.auth.currentUser) fs.signInAnonymously(auth); 
                 goToBossSelection();
             }, 'initial-start-button');
             
@@ -724,7 +735,6 @@
             contentDiv.innerHTML = `<div class="text-center py-10"><h2 class="text-3xl font-bold text-yellow-400 mb-4 text-shadow-custom">正在回報戰果並計算排名...</h2><div class="animate-spin rounded-full h-12 w-12 border-b-2 border-yellow-500 mx-auto mt-6"></div></div>`;
             try {
                 const result = await recordCompletionAndShowRank();
-                // 這裡邏輯維持 successRank <= 50 作為成功判斷 (即便榜單全顯示)
                 const isGrandSuccess = (completionTime < INITIAL_TIME_SECONDS) && (result.successRank > 0 && result.successRank <= 50);
                 
                 if (isGrandSuccess) { 
