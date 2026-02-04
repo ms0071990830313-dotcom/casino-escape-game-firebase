@@ -181,7 +181,7 @@
         import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, serverTimestamp, query, where, orderBy, getDocs, Timestamp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+        const firebaseConfig = {
             apiKey: "AIzaSyCR-oc58h8fmdqt-7VU1F9hstznu0l0vvQ",
             authDomain: "casini-game.firebaseapp.com",
             projectId: "casini-game",
@@ -193,21 +193,12 @@
         window.firebaseApp = initializeApp(firebaseConfig);
         window.db = getFirestore(window.firebaseApp);
         window.auth = getAuth(window.firebaseApp);
-        window.APP_ID = typeof __app_id !== 'undefined' ? __app_id : firebaseConfig.projectId;
+        window.APP_ID = firebaseConfig.projectId;
         window.currentUserId = null;
         window.isAuthReady = false;
 
         setLogLevel('error');
 
-        const initAuth = async () => {
-            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                await signInWithCustomToken(window.auth, __initial_auth_token);
-            } else {
-                await signInAnonymously(window.auth);
-            }
-        };
-        initAuth();
-        
         onAuthStateChanged(window.auth, (user) => {
             if (user) {
                 window.currentUserId = user.uid;
@@ -217,7 +208,7 @@
             window.isAuthReady = true;
         });
         
-        window.fs = { collection, addDoc, serverTimestamp, query, where, orderBy, getDocs, Timestamp, signInAnonymously };
+        window.fs = { collection, addDoc, serverTimestamp, query, where, orderBy, getDocs, Timestamp, signInAnonymously, signInWithCustomToken };
     </script>
 </head>
 <body class="min-h-screen flex items-center justify-center p-4">
@@ -362,22 +353,22 @@
             }
         }
 
-        // 修改：優化行動裝置音訊解鎖，避免解鎖時發出聲音
+        // 修改：優化解鎖邏輯，強制靜音且不等待 Promise，防止聲音洩漏或背景播放
         function unlockAudio(audio) {
             if (!audio) return;
-            const originalMuted = audio.muted;
-            audio.muted = true; // 關鍵：先靜音再解鎖
-            const playPromise = audio.play();
-            if (playPromise !== undefined) {
-                playPromise.then(_ => {
+            audio.muted = true; // 強制設為靜音，這樣就算它播完了也沒聲音
+            try {
+                const p = audio.play();
+                if (p !== undefined) {
+                    p.then(() => {
+                        audio.pause();
+                        audio.currentTime = 0;
+                    }).catch(() => {});
+                } else {
                     audio.pause();
                     audio.currentTime = 0;
-                    audio.muted = originalMuted; // 解鎖完畢恢復
-                }).catch(error => {
-                    audio.muted = originalMuted;
-                    console.log("音訊解鎖略過。");
-                });
-            }
+                }
+            } catch (e) {}
         }
 
         function showLaunchPage() {
@@ -389,8 +380,9 @@
 
             const handleCheckboxClick = () => {
                 if (gunLoadingSound) {
+                    gunLoadingSound.muted = false; // 勾選時是唯一允許出聲的時刻
                     gunLoadingSound.currentTime = 0;
-                    gunLoadingSound.play().catch(e => console.log("Sound play prevented: ", e));
+                    gunLoadingSound.play().catch(() => {});
                 }
             };
 
@@ -413,7 +405,14 @@
                     return;
                 }
 
-                startBGM();
+                // 修改：在此處解除 BGM 靜音並播放
+                if (bgm) {
+                    bgm.muted = false;
+                    bgm.volume = 0.5;
+                    bgm.play().catch(() => {});
+                }
+
+                // 其他特效音軌僅執行靜音解鎖，不發聲
                 unlockAudio(successSound);
                 unlockAudio(lateSound);
                 unlockAudio(gunLoadingSound);
@@ -426,13 +425,6 @@
             };
         }
         
-        function startBGM() {
-            if (bgm && bgm.paused) {
-                bgm.volume = 0.5;
-                bgm.play().catch(error => console.log("BGM 播放等待。"));
-            }
-        }
-
         function formatTime(seconds) {
             const minutes = Math.floor(seconds / 60);
             const remainingSeconds = seconds % 60;
@@ -575,6 +567,7 @@
                 const sortedByTime = [...allTodayDocs].sort((a, b) => a.completionTime - b.completionTime);
                 const timeRank = sortedByTime.findIndex(d => d.id === docRef.id) + 1;
 
+                // 顯示全榜單
                 const topTenRanks = sortedByTime.map((data, index) => ({
                     rank: index + 1, name: data.name || "神秘特工", time: formatTime(data.completionTime || 0), isPlayer: data.userId === uid
                 }));
@@ -616,6 +609,7 @@
             contentDiv.innerHTML = `<div class="text-center space-y-6"><p class="text-lg text-gray-300">一場秘密行動即將展開...</p><img src="cover.jpg" onerror="this.onerror=null; this.src='https://placehold.co/400x200/29294F/FFF?text=起始畫面圖片';" class="mx-auto w-full max-w-sm rounded-lg shadow-xl border-2 border-yellow-500 object-cover"></div>`;
             
             const initialButton = renderButton("進入秘密任務", () => {
+                if (window.auth && !window.auth.currentUser) fs.signInAnonymously(window.auth); 
                 goToBossSelection();
             }, 'initial-start-button');
             
@@ -738,10 +732,16 @@
                 const isGrandSuccess = (completionTime < INITIAL_TIME_SECONDS) && (result.successRank > 0 && result.successRank <= 50);
                 
                 if (isGrandSuccess) { 
-                    if (successSound) successSound.play().catch(e => console.log(e)); 
+                    if (successSound) {
+                        successSound.muted = false; // 正式出聲
+                        successSound.play().catch(e => console.log(e)); 
+                    }
                     goToSuccess(result.rank, result.successRank, result.timeRank, result.totalRecords, result.topTenRanks); 
                 } else { 
-                    if (lateSound) lateSound.play().catch(e => console.log(e)); 
+                    if (lateSound) {
+                        lateSound.muted = false; // 正式出聲
+                        lateSound.play().catch(e => console.log(e)); 
+                    }
                     goToLateSuccess(result.rank, result.successRank, result.timeRank, result.totalRecords, result.topTenRanks); 
                 }
             } catch (e) { goToLateSuccess('N/A', 'N/A', 'N/A', 'N/A', []); }
@@ -825,7 +825,7 @@
                     document.fonts.ready
                 ]);
             } catch (e) {
-                console.log("字體預載失敗，嘗試繼續繪製。");
+                console.log("字體預載失敗。");
             }
 
             const canvas = document.createElement('canvas');
