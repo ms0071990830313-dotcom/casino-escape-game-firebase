@@ -353,7 +353,7 @@
             }
         }
 
-        // 修改：優化解鎖邏輯，強制靜音且不等待 Promise，防止聲音洩漏或背景播放
+        // 優化解鎖邏輯，強制靜音且不等待 Promise，防止聲音洩漏或背景播放
         function unlockAudio(audio) {
             if (!audio) return;
             audio.muted = true; // 強制設為靜音，這樣就算它播完了也沒聲音
@@ -405,7 +405,7 @@
                     return;
                 }
 
-                // 修改：在此處解除 BGM 靜音並播放
+                // 在此處解除 BGM 靜音並播放
                 if (bgm) {
                     bgm.muted = false;
                     bgm.volume = 0.5;
@@ -815,17 +815,19 @@
 
         let lastGeneratedBlob = null;
 
+        // --- 強化版字體載入與 Canvas 繪圖 ---
         async function generateShareImage(tRank, total) {
             showMessage("正在準備特工文件與加密字體...", false);
             
             try {
+                // 1. 偵測特定權重的字體載入 (700 權重是我們需要的宋體粗體)
                 await Promise.all([
                     document.fonts.load("bold 77px 'Special Elite'"),
-                    document.fonts.load("bold 77px 'Noto Serif TC'"),
+                    document.fonts.load("700 77px 'Noto Serif TC'"), // 使用 700 明確匹配 CSS 中的權重
                     document.fonts.ready
                 ]);
             } catch (e) {
-                console.log("字體預載失敗。");
+                console.log("字體偵測失敗。");
             }
 
             const canvas = document.createElement('canvas');
@@ -838,9 +840,10 @@
             bgImg.src = "stories.jpg";
 
             bgImg.onload = () => {
+                // 2. 額外給予 150ms 延時，讓瀏覽器渲染引擎「緩口氣」完成字體快取應用
                 setTimeout(() => {
                     drawShareCanvasContent(ctx, bgImg, tRank, total, canvas);
-                }, 100);
+                }, 150);
             };
 
             bgImg.onerror = () => {
@@ -856,19 +859,24 @@
             ctx.textAlign = "center";
             const maxTextWidth = 880; 
             
-            const shareFont = "bold 77px 'Special Elite', 'Noto Serif TC', serif";
-            const shareFontSmall = "bold 65px 'Special Elite', 'Noto Serif TC', serif";
+            // 3. 確保字體字串精確：優先英文 Special Elite，中文回退到 Noto Serif TC
+            // 在繪製每一行前「重新宣告」字體，防止 context 重置
+            const serifFontStr = "bold 77px 'Special Elite', 'Noto Serif TC', serif";
+            const serifFontSmallStr = "bold 65px 'Special Elite', 'Noto Serif TC', serif";
             
+            // --- 行 1：特工代號 ---
+            ctx.font = serifFontStr;
             ctx.fillStyle = "#FFFFFF";
-            ctx.font = shareFont;
             ctx.fillText(`特工代號：${playerName}`, 540, 380, maxTextWidth); 
 
+            // --- 行 2：耗時 (金黃色) ---
+            ctx.font = serifFontStr; // 再次宣告
             ctx.fillStyle = "#fbbf24"; 
-            ctx.font = shareFont; 
             ctx.fillText(`金庫破解耗時：${completionTime} 秒`, 540, 555, maxTextWidth);
 
+            // --- 行 3：懸賞榜 ---
+            ctx.font = serifFontSmallStr; // 再次宣告
             ctx.fillStyle = "#FFFFFF";
-            ctx.font = shareFontSmall;
             const rankDisplay = (tRank && tRank !== 'N/A' && total !== 'N/A') ? `No. ${tRank} / ${total}` : "MISSION SUCCESS";
             ctx.fillText(`最速懸賞榜：${rankDisplay}`, 540, 730, maxTextWidth);
 
