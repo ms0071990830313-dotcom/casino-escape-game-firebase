@@ -352,19 +352,17 @@
             }
         }
 
-        // 行動裝置音訊解鎖（靜音熱身版，解決洩漏短促雜音）
+        // 修改：精確音訊解鎖，解鎖後強制保持靜音，防止雜音漏出
         function unlockAudio(audio) {
             if (!audio) return;
-            const originalMuted = audio.muted;
-            audio.muted = true;
+            audio.muted = true; // 強制設定靜音
             const playPromise = audio.play();
             if (playPromise !== undefined) {
                 playPromise.then(_ => {
                     audio.pause();
                     audio.currentTime = 0;
-                    audio.muted = originalMuted;
+                    // 注意：此處不再恢復音量，確保解鎖過程無聲
                 }).catch(e => {
-                    audio.muted = originalMuted;
                     console.log("Audio unlock bypassed.");
                 });
             }
@@ -379,7 +377,7 @@
 
             const handleCheckboxClick = () => {
                 if (gunLoadingSound) {
-                    gunLoadingSound.muted = false;
+                    gunLoadingSound.muted = false; // 只有主動點擊時才解除靜音播放
                     gunLoadingSound.currentTime = 0;
                     gunLoadingSound.play().catch(e => {});
                 }
@@ -404,12 +402,14 @@
                     return;
                 }
 
-                // 啟動 BGM 並預先解鎖音軌
+                // 啟動 BGM (唯一在開始時允許出聲的音軌)
                 if (bgm) {
                     bgm.muted = false;
                     bgm.volume = 0.5;
                     bgm.play().catch(e => {});
                 }
+                
+                // 其他音軌進行靜音解鎖，防止雜音同步播放
                 unlockAudio(successSound);
                 unlockAudio(lateSound);
                 unlockAudio(gunLoadingSound);
@@ -569,7 +569,7 @@
                     rank: index + 1, name: data.name || "神秘特工", time: formatTime(data.completionTime || 0), isPlayer: data.userId === uid
                 }));
                 
-                return { rank, successRank: successRank > 0 ? successRank : 'N/A', timeRank, totalRecords: allTodayDocs.length, allRanks };
+                return { rank: allTodayDocs.length, successRank: successRank > 0 ? successRank : 'N/A', timeRank, totalRecords: allTodayDocs.length, allRanks };
             } catch (e) { return defaultResult; }
         }
 
@@ -647,7 +647,7 @@
                         showMessage("你的代號已被使用，請更換一個。", true); button.disabled = false; button.textContent = "確認代號";
                     } else { 
                         playerName = trimmedName; 
-                        // 強化字體修復：將名字放入預載區，提早觸發瀏覽器下載宋體字圖
+                        // 將名字放入預載區
                         document.getElementById('font-preloader-text').textContent += playerName;
                         showMessage(`代號：${playerName}，確認！`); 
                         setTimeout(goToMissionDialogue, 1500); 
@@ -733,13 +733,18 @@
                 const result = await recordCompletionAndShowRank();
                 const isGrandSuccess = (completionTime < INITIAL_TIME_SECONDS) && (result.successRank > 0 && result.successRank <= 50);
                 
+                // 修改：只在此處解除靜音並播放需要的音效
                 if (isGrandSuccess) { 
-                    successSound.muted = false;
-                    successSound.play().catch(e => console.log(e)); 
+                    if (successSound) {
+                        successSound.muted = false; 
+                        successSound.play().catch(e => console.log(e)); 
+                    }
                     goToSuccess(result.rank, result.successRank, result.timeRank, result.totalRecords, result.allRanks); 
                 } else { 
-                    lateSound.muted = false;
-                    lateSound.play().catch(e => console.log(e)); 
+                    if (lateSound) {
+                        lateSound.muted = false;
+                        lateSound.play().catch(e => console.log(e)); 
+                    }
                     goToLateSuccess(result.rank, result.successRank, result.timeRank, result.totalRecords, result.allRanks); 
                 }
             } catch (e) { goToLateSuccess('N/A', 'N/A', 'N/A', 'N/A', []); }
@@ -811,22 +816,19 @@
 
         let lastGeneratedBlob = null;
 
-        // --- 📸 強化版字體載入與 Canvas 繪圖：徹底解決字體不一問題 ---
+        // --- 📸 強化版字體載入與 Canvas 繪圖 ---
         async function generateShareImage(tRank, total) {
             showMessage("正在解析特工指紋與加密字體...", false);
             
-            // 重要：包含玩家自定義代號的完整字串，強制瀏覽器載入該子集的宋體字圖
             const dynamicText = `特工代號：${playerName}金庫破解耗時：${completionTime}秒No. /`;
 
             try {
-                // 1. 強制指定 Noto Serif TC (700 權重) 以及化名中出現的特定文字
                 await Promise.all([
                     document.fonts.load("bold 77px 'Special Elite'"),
                     document.fonts.load(`700 77px 'Noto Serif TC'`, dynamicText), 
                     document.fonts.ready
                 ]);
 
-                // 2. 離屏預渲染：在看不見的 Canvas 上先畫一次代號，強制喚醒渲染引擎字體快取
                 const dummyCanvas = document.createElement('canvas');
                 const dummyCtx = dummyCanvas.getContext('2d');
                 dummyCtx.font = "700 77px 'Noto Serif TC'";
@@ -845,7 +847,6 @@
             bgImg.src = "stories.jpg";
 
             bgImg.onload = () => {
-                // 3. 給予 250ms 的寬限期，確保瀏覽器字體渲染引擎同步完成
                 setTimeout(() => {
                     drawShareCanvasContent(ctx, bgImg, tRank, total, canvas);
                 }, 250);
@@ -864,22 +865,18 @@
             ctx.textAlign = "center";
             const maxTextWidth = 880; 
             
-            // 重要：在繪製每一行前，都宣告一次完整的 Font String
             const serifFontFull = "bold 77px 'Special Elite', 'Noto Serif TC', serif";
             const serifFontSmall = "bold 65px 'Special Elite', 'Noto Serif TC', serif";
             
-            // --- 1. 特工代號 ---
             ctx.font = serifFontFull;
             ctx.fillStyle = "#FFFFFF";
             ctx.fillText(`特工代號：${playerName}`, 540, 380, maxTextWidth); 
 
-            // --- 2. 金庫破解耗時 ---
-            ctx.font = serifFontFull; // 重置宣告
+            ctx.font = serifFontFull; 
             ctx.fillStyle = "#fbbf24"; 
             ctx.fillText(`金庫破解耗時：${completionTime} 秒`, 540, 555, maxTextWidth);
 
-            // --- 3. 最速懸賞榜 ---
-            ctx.font = serifFontSmall; // 重置宣告
+            ctx.font = serifFontSmall; 
             ctx.fillStyle = "#FFFFFF";
             const rankDisplay = (tRank && tRank !== 'N/A' && total !== 'N/A') ? `No. ${tRank} / ${total}` : "MISSION SUCCESS";
             ctx.fillText(`最速懸賞榜：${rankDisplay}`, 540, 730, maxTextWidth);
